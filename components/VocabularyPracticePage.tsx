@@ -134,6 +134,17 @@ const VocabularyPracticePage: React.FC<Props> = ({ studentId, studentName = 'you
   const [showArabicFirst, setShowArabicFirst] = useState(true);
   // ref to avoid recording the SRS attempt more than once per session win
   const practiceAttemptRecordedRef = useRef(false);
+  // Hardcore (the old way, still the default): a miss starts the round over.
+  // Off: the missed card goes to the back of the round and comes round again.
+  // Remembered on this device. Only a hardcore round counts as a review session.
+  const [hardcore, setHardcore] = useState<boolean>(() => {
+    try { return localStorage.getItem('vocab:flashcardsHardcore') !== '0'; } catch { return true; }
+  });
+  const toggleHardcore = () => setHardcore(h => {
+    try { localStorage.setItem('vocab:flashcardsHardcore', h ? '0' : '1'); } catch { /* private mode */ }
+    return !h;
+  });
+  const [practiceMisses, setPracticeMisses] = useState(0);
 
   // ── grammar modal ─────────────────────────────────────────────────────────
   const [grammarPhraseIdx, setGrammarPhraseIdx] = useState<number | null>(null);
@@ -439,6 +450,7 @@ const VocabularyPracticePage: React.FC<Props> = ({ studentId, studentName = 'you
     setPracticeQueue(q);
     setPracticeTotal(q.length);
     setPracticeIdx(0);
+    setPracticeMisses(0);
     setShowingArabic(showArabicFirst);
     practiceAttemptRecordedRef.current = false; // allow recording for this new session
     setTab('practice');
@@ -446,6 +458,14 @@ const VocabularyPracticePage: React.FC<Props> = ({ studentId, studentName = 'you
 
   const handleWrong = () => {
     recordCard(practiceQueue[practiceIdx], false);
+    if (!hardcore) {
+      // Not hardcore: the missed card waits at the back of the round.
+      const card = practiceQueue[practiceIdx];
+      setPracticeQueue(q => [...q.slice(0, practiceIdx), ...q.slice(practiceIdx + 1), card]);
+      setPracticeMisses(m => m + 1);
+      setShowingArabic(showArabicFirst);
+      return;
+    }
     const source = practiceMode === 'words' ? playWordsRef.current : playPhrasesRef.current;
     const filtered = source.filter(i => i.translation);
     const q = buildQueue(filtered);
@@ -463,7 +483,7 @@ const VocabularyPracticePage: React.FC<Props> = ({ studentId, studentName = 'you
 
     // Record SRS attempt when the final card is answered correctly
     const justWon = newIdx >= practiceTotal && practiceTotal > 0;
-    if (justWon && !practiceAttemptRecordedRef.current && activeListId && playSet.size <= 1) {
+    if (justWon && hardcore && !practiceAttemptRecordedRef.current && activeListId && playSet.size <= 1) {
       practiceAttemptRecordedRef.current = true;
 
       if (currentSrsAttempts.length >= 5) {
@@ -1343,8 +1363,21 @@ const VocabularyPracticePage: React.FC<Props> = ({ studentId, studentName = 'you
               </button>
             ))}
             <button
+              type="button"
+              role="switch"
+              aria-checked={hardcore}
+              onClick={toggleHardcore}
+              title={hardcore ? 'A miss starts the round over' : 'A miss comes back later'}
+              className="ml-auto flex items-center gap-2 px-3 py-1.5 text-sm font-semibold rounded-full text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-gray-700 transition"
+            >
+              <span className={`relative w-8 h-[18px] rounded-full transition-colors ${hardcore ? 'bg-red-500' : 'bg-slate-300 dark:bg-gray-600'}`}>
+                <span className={`absolute top-[2px] w-[14px] h-[14px] rounded-full bg-white shadow transition-all ${hardcore ? 'left-[16px]' : 'left-[2px]'}`} />
+              </span>
+              Hardcore
+            </button>
+            <button
               onClick={() => startPractice()}
-              className="ml-auto flex items-center gap-1.5 px-4 py-1.5 text-sm font-semibold rounded-full bg-slate-100 dark:bg-gray-700 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-gray-600 transition"
+              className="flex items-center gap-1.5 px-4 py-1.5 text-sm font-semibold rounded-full bg-slate-100 dark:bg-gray-700 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-gray-600 transition"
             >
               <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182m0-4.991v4.99" />
@@ -1357,7 +1390,7 @@ const VocabularyPracticePage: React.FC<Props> = ({ studentId, studentName = 'you
             <div className="bg-white dark:bg-gray-800 border border-slate-200 dark:border-gray-700 rounded-3xl p-12 text-center">
               <div className="text-5xl mb-4">✦</div>
               <h2 className="text-2xl font-bold text-slate-800 dark:text-slate-100 mb-2">أحسنت!</h2>
-              <p className="text-sm text-slate-500 dark:text-slate-400 mb-8">You completed all {practiceTotal} cards.</p>
+              <p className="text-sm text-slate-500 dark:text-slate-400 mb-8">You completed all {practiceTotal} cards.{!hardcore && practiceMisses > 0 ? ` ${practiceMisses} missed on the way.` : ''}</p>
               <button
                 onClick={() => startPractice()}
                 className="px-8 py-3 bg-teal-600 dark:bg-orange-500 text-white rounded-full font-semibold hover:bg-teal-700 dark:hover:bg-orange-600 transition-colors"

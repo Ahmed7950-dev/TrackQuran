@@ -112,3 +112,34 @@ export const addWordToFreeTalkList = async (
   const { error: saveErr } = await supabase.from('vocabulary_lists').upsert(row, { onConflict: 'id' });
   return saveErr ? saveErr.message : null;
 };
+
+/** Change one word of a word list (Free Talk: the (i) of a found word). Reads
+ *  the list fresh so a word added meanwhile on the other side is kept.
+ *  Returns an error message, or null when saved. */
+export const updateListWord = async (
+  listId: string, wordId: string,
+  word: { text: string; translation: string; transliteration: string },
+): Promise<string | null> => {
+  const { data, error } = await supabase.from('vocabulary_lists').select('words').eq('id', listId).maybeSingle();
+  if (error) return error.message;
+  if (!data) return 'That word list is gone.';
+  const words = (data.words ?? []) as VocabWord[];
+  if (!words.some(w => w.id === wordId)) return 'That word is not in the list any more.';
+  const next = words.map(w => (w.id === wordId
+    ? { ...w, text: word.text.trim(), translation: word.translation.trim(), transliteration: word.transliteration.trim() }
+    : w));
+  const { error: saveErr } = await supabase.from('vocabulary_lists')
+    .update({ words: next, updated_at: new Date().toISOString() }).eq('id', listId);
+  return saveErr ? saveErr.message : null;
+};
+
+/** Take one word out of a word list. Returns an error message, or null. */
+export const removeListWord = async (listId: string, wordId: string): Promise<string | null> => {
+  const { data, error } = await supabase.from('vocabulary_lists').select('words').eq('id', listId).maybeSingle();
+  if (error) return error.message;
+  if (!data) return 'That word list is gone.';
+  const words = (data.words ?? []) as VocabWord[];
+  const { error: saveErr } = await supabase.from('vocabulary_lists')
+    .update({ words: words.filter(w => w.id !== wordId), updated_at: new Date().toISOString() }).eq('id', listId);
+  return saveErr ? saveErr.message : null;
+};

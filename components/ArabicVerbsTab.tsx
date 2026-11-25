@@ -33,7 +33,7 @@ import FreeTalkBoard from './FreeTalkBoard';
 import FreeTalkVerbTable from './FreeTalkVerbTable';
 import FreeTalkPractice, { canPractise } from './FreeTalkPractice';
 import { QRCodeSVG } from 'qrcode.react';
-import { getVocabularyLists, addWordToFreeTalkList, FREE_TALK_LIST_NAME } from '../services/vocabularyService';
+import { getVocabularyLists, addWordToFreeTalkList, updateListWord, removeListWord, FREE_TALK_LIST_NAME } from '../services/vocabularyService';
 import {
   ArabicVerb, TENSES, TenseKey, VerbPrefs, VerbScript, VerbTable, VerbVariety,
   deleteVerb, getVerbPrefs, listVerbs, logFreeTalkWord, saveVerb, saveVerbPrefs, subscribeFreeTalk,
@@ -567,11 +567,18 @@ const ShareDialog: React.FC<{ student: ArabicStudent; onClose: () => void }> = (
 
 // ── Words found by the search ───────────────────────────────────────────────
 
-interface FoundWord { key: string; ar: string; tr: string; en: string; source: string; level?: number; kind: 'lesson' | 'list' }
+interface FoundWord { key: string; ar: string; tr: string; en: string; source: string; level?: number; kind: 'lesson' | 'list'; listId?: string; wordId?: string }
+
+/** Edit / remove a word-list word (lesson words are shared, so never). */
+interface WordActions { onEdit: (w: FoundWord) => void; onRemove: (w: FoundWord) => Promise<string | null> }
 
 /** The details behind the (i) of a found word, floating over the page. */
-const WordInfo: React.FC<{ word: FoundWord; anchor: DOMRect; onClose: () => void }> = ({ word, anchor, onClose }) => {
+const WordInfo: React.FC<{ word: FoundWord; anchor: DOMRect; onClose: () => void; actions?: WordActions }> = ({ word, anchor, onClose, actions }) => {
   const ref = useRef<HTMLDivElement>(null);
+  const [confirming, setConfirming] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const canChange = !!actions && word.kind === 'list' && !!word.listId && !!word.wordId;
   useEffect(() => {
     const away = (e: PointerEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) onClose(); };
     const esc = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
@@ -606,12 +613,36 @@ const WordInfo: React.FC<{ word: FoundWord; anchor: DOMRect; onClose: () => void
           {word.source}{word.kind === 'lesson' && word.level ? <span className="font-normal text-slate-500 dark:text-slate-400"> · Level {word.level}</span> : null}
         </span>
       ))}
+      {canChange && (
+        <div className="flex flex-col gap-1.5 pt-2 pb-1 border-t border-slate-100 dark:border-gray-700">
+          {error && <p role="alert" className="text-xs font-semibold text-red-600">{error}</p>}
+          <div className="flex gap-2">
+            <button type="button" onClick={() => { actions!.onEdit(word); onClose(); }}
+              className="flex-1 h-9 rounded-lg border border-slate-300 dark:border-gray-600 text-xs font-bold text-slate-700 dark:text-slate-200 hover:border-teal-500 hover:text-teal-700 dark:hover:text-teal-300">
+              Edit
+            </button>
+            <button type="button" disabled={busy}
+              onClick={async () => {
+                if (!confirming) { setConfirming(true); return; }
+                setBusy(true); setError(null);
+                const err = await actions!.onRemove(word);
+                setBusy(false);
+                if (err) { setError(`Not removed: ${err}`); setConfirming(false); } else onClose();
+              }}
+              className={`flex-1 h-9 rounded-lg text-xs font-bold disabled:opacity-60 ${confirming
+                ? 'bg-red-600 hover:bg-red-700 text-white'
+                : 'border border-slate-300 dark:border-gray-600 text-red-600 dark:text-red-400 hover:border-red-400'}`}>
+              {busy ? 'Removing…' : confirming ? 'Remove it' : 'Remove'}
+            </button>
+          </div>
+        </div>
+      )}
     </div>,
     document.body,
   );
 };
 
-const WordResults: React.FC<{ query: string; words: FoundWord[]; script: VerbScript; onAdd?: () => void }> = ({ query, words, script, onAdd }) => {
+const WordResults: React.FC<{ query: string; words: FoundWord[]; script: VerbScript; onAdd?: () => void; actions?: WordActions }> = ({ query, words, script, onAdd, actions }) => {
   const shown = words.slice(0, 30);
   const [info, setInfo] = useState<{ word: FoundWord; anchor: DOMRect } | null>(null);
   const closeInfo = useCallback(() => setInfo(null), []);
@@ -656,7 +687,7 @@ const WordResults: React.FC<{ query: string; words: FoundWord[]; script: VerbScr
           {words.length > shown.length && <span className="flex-shrink-0 px-1.5 text-xs font-semibold text-slate-400">+{words.length - shown.length} more</span>}
         </>
       )}
-      {info && <WordInfo word={info.word} anchor={info.anchor} onClose={closeInfo} />}
+      {info && <WordInfo key={info.word.key} word={info.word} anchor={info.anchor} onClose={closeInfo} actions={actions} />}
     </div>
   );
 };
@@ -668,18 +699,20 @@ const sameWordKey = (s: string) => normForSearch(s.replace(/^\s*[ae]?[lstdrzn]h?
 const wordKeys = (s: string) => (s || '').split('/').map(sameWordKey).filter(Boolean);
 
 const AddWordDialog: React.FC<{
-  initial: { ar: string; en: string };
+  initial: { ar: string; en: string; tr?: string };
+  /** Changing a word already in a list (no "already there" check). */
+  editing?: boolean;
   onClose: () => void;
   onSave: (w: { text: string; transliteration: string; translation: string }) => Promise<string | null>;
   /** Where this word already is (a lesson or the Free Talk list), or null. */
   findExisting: (ar: string, tr: string) => string | null;
-}> = ({ initial, onClose, onSave, findExisting }) => {
+}> = ({ initial, editing = false, onClose, onSave, findExisting }) => {
   const [ar, setAr] = useState(initial.ar);
-  const [tr, setTr] = useState('');
+  const [tr, setTr] = useState(initial.tr ?? '');
   const [en, setEn] = useState(initial.en);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const already = useMemo(() => findExisting(ar, tr), [ar, tr, findExisting]);
+  const already = useMemo(() => (editing ? null : findExisting(ar, tr)), [editing, ar, tr, findExisting]);
   const save = async () => {
     if (!ar.trim() && !tr.trim()) { setError('Write the word in Arabic or in transliteration.'); return; }
     if (already) return;
@@ -692,10 +725,10 @@ const AddWordDialog: React.FC<{
   return (
     <>
       <span className="fixed inset-0 z-50 bg-slate-900/40" onClick={onClose} />
-      <div role="dialog" aria-label="Add a word"
+      <div role="dialog" aria-label={editing ? 'Edit a word' : 'Add a word'}
         className="fixed z-50 inset-x-3 bottom-3 sm:inset-x-auto sm:bottom-auto sm:top-1/2 sm:left-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2 sm:w-[440px] rounded-2xl bg-white dark:bg-gray-800 border border-slate-200 dark:border-gray-600 shadow-2xl p-5 flex flex-col gap-3.5"
         onKeyDown={e => { if (e.key === 'Escape') onClose(); if (e.key === 'Enter') void save(); }}>
-        <h3 className="text-lg font-extrabold text-slate-900 dark:text-slate-100">Add a word</h3>
+        <h3 className="text-lg font-extrabold text-slate-900 dark:text-slate-100">{editing ? 'Edit word' : 'Add a word'}</h3>
         <label className="flex flex-col gap-1 text-xs font-bold text-slate-600 dark:text-slate-300">Arabic
           <input dir="rtl" value={ar} onChange={e => setAr(e.target.value)} autoFocus={!initial.en} className={field} style={{ fontFamily: AR_FONT, fontSize: 20, fontWeight: 700 }} />
         </label>
@@ -759,11 +792,12 @@ const ArabicVerbsTab: React.FC<Props> = ({ student, lessons, studentMode = false
   const listIds = useRef<Set<string>>(new Set());
   const reloadLists = useCallback(() => {
     void getVocabularyLists(student.id).then(ls => (listIds.current = new Set(ls.map(l => l.id)), ls)).then(ls => setListWords(ls.flatMap(l => (l.words ?? []).map(w => ({
-      key: `l-${l.id}-${w.id}`, ar: w.text, tr: w.transliteration, en: w.translation, source: l.name, kind: 'list' as const,
+      key: `l-${l.id}-${w.id}`, ar: w.text, tr: w.transliteration, en: w.translation, source: l.name, kind: 'list' as const, listId: l.id, wordId: w.id,
     })))));
   }, [student.id]);
   useEffect(() => { reloadLists(); }, [reloadLists]);
   const [addingWord, setAddingWord] = useState<{ ar: string; en: string } | null>(null);
+  const [editingWord, setEditingWord] = useState<FoundWord | null>(null);
   const [savedNote, setSavedNote] = useState<string | null>(null);
   const [sharing, setSharing] = useState(false);
   const [asking, setAsking] = useState(false);
@@ -818,8 +852,10 @@ const ArabicVerbsTab: React.FC<Props> = ({ student, lessons, studentMode = false
   const learnsBoth = learnsBothOf(student);
   // The tutor always; the student on their own page (they write with their link).
   const canEdit = !studentMode || !!student.shareToken;
-  // Adding words and verbs, Talk questions and the variety/script label are the tutor's only.
-  const canAdd = !studentMode;
+  // Adding verbs: whoever can edit them (the student writes with their link).
+  const canAdd = canEdit;
+  // Words go to the student's own word list, which their link can write.
+  // Talk questions, sharing and the variety/script label stay the tutor's.
   const showSwitch = learnsBoth;
 
   const changeVariety = async (v: VerbVariety) => {
@@ -863,6 +899,15 @@ const ArabicVerbsTab: React.FC<Props> = ({ student, lessons, studentMode = false
     const hit = knownWords.find(k => (a && k.ar.includes(a)) || (!a && t && k.tr.includes(t)));
     return hit ? hit.where : null;
   }, [knownWords]);
+
+  const wordActions = useMemo<WordActions>(() => ({
+    onEdit: w => setEditingWord(w),
+    onRemove: async w => {
+      const err = await removeListWord(w.listId!, w.wordId!);
+      if (!err) reloadLists();
+      return err;
+    },
+  }), [reloadLists]);
 
   // Clicking anywhere outside the open card closes it.
   const wallRef = useRef<HTMLDivElement>(null);
@@ -926,7 +971,7 @@ const ArabicVerbsTab: React.FC<Props> = ({ student, lessons, studentMode = false
           </span>
         </div>
         <div className="flex items-center gap-2.5 flex-wrap">
-          {canAdd && (
+          {!studentMode && (
           <button type="button" onClick={() => setAsking(true)}
             title="Questions to answer out loud, from the lessons"
             className="h-9 px-3.5 rounded-full bg-slate-900 hover:bg-slate-700 text-white dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-white disabled:opacity-40 text-xs font-extrabold flex items-center gap-1.5">
@@ -956,7 +1001,8 @@ const ArabicVerbsTab: React.FC<Props> = ({ student, lessons, studentMode = false
           query={query}
           words={foundWords}
           script={script}
-          onAdd={canAdd ? () => setAddingWord(/[\u0600-\u06FF]/.test(query) ? { ar: query.trim(), en: '' } : { ar: '', en: verbPart(query) }) : undefined}
+          onAdd={() => setAddingWord(/[\u0600-\u06FF]/.test(query) ? { ar: query.trim(), en: '' } : { ar: '', en: verbPart(query) })}
+          actions={wordActions}
         />
         <div className="flex items-center gap-2 flex-shrink-0">
           <label className="relative flex-1 lg:flex-none">
@@ -964,16 +1010,14 @@ const ArabicVerbsTab: React.FC<Props> = ({ student, lessons, studentMode = false
               <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4"><circle cx="11" cy="11" r="7" /><path strokeLinecap="round" d="m20 20-3.5-3.5" /></svg>
             </span>
             <input type="search" value={query} onChange={e => { setQuery(e.target.value); setOpen(null); }}
-              aria-label="Search verbs and words" placeholder={typeof window !== 'undefined' && window.innerWidth < 420 && canAdd ? 'Search' : 'Search a verb or a word'}
+              aria-label="Search verbs and words" placeholder={typeof window !== 'undefined' && window.innerWidth < 420 ? 'Search' : 'Search a verb or a word'}
               className="w-full lg:w-[300px] h-11 ps-9 pe-3 rounded-xl border border-slate-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20" />
           </label>
-          {canAdd && (
-            <button type="button" onClick={() => setAddingWord({ ar: '', en: '' })}
+          <button type="button" onClick={() => setAddingWord({ ar: '', en: '' })}
               className="flex-shrink-0 h-11 px-3.5 rounded-xl border border-teal-600 text-teal-700 bg-white hover:bg-teal-50 dark:bg-gray-800 dark:text-teal-300 dark:border-teal-500 dark:hover:bg-teal-900/30 text-sm font-bold flex items-center gap-1.5">
               <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.4} stroke="currentColor" className="w-4 h-4"><path strokeLinecap="round" d="M12 5v14M5 12h14" /></svg>
               <span className="hidden sm:inline">Add word</span><span className="sm:hidden">Word</span>
             </button>
-          )}
           {canAdd && (
             <button type="button" onClick={() => setEditing('new')}
               className="flex-shrink-0 h-11 px-3.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-sm font-bold flex items-center gap-1.5">
@@ -1005,6 +1049,21 @@ const ArabicVerbsTab: React.FC<Props> = ({ student, lessons, studentMode = false
             if (logErr) console.error('logFreeTalkWord:', logErr);
             setSavedNote(`Saved to the list "${FREE_TALK_LIST_NAME}". It is in Vocabulary, Word lists, too.${logErr ? ' (Today was not marked in the calendar.)' : ''}`);
             setTimeout(() => setSavedNote(null), 5000);
+            return null;
+          }}
+        />
+      )}
+      {editingWord && editingWord.listId && editingWord.wordId && (
+        <AddWordDialog
+          editing
+          initial={{ ar: editingWord.ar, tr: editingWord.tr, en: editingWord.en }}
+          findExisting={findExisting}
+          onClose={() => setEditingWord(null)}
+          onSave={async w => {
+            const err = await updateListWord(editingWord.listId!, editingWord.wordId!, w);
+            if (err) return `Not saved: ${err}`;
+            setEditingWord(null);
+            reloadLists();
             return null;
           }}
         />
