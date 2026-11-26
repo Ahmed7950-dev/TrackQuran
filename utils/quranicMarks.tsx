@@ -253,6 +253,85 @@ export const marksInUnit = (unit: string): string[] =>
 
 export interface UnitOverlay { mark: string; top: number; dx?: number }
 
+// ── Marks that land on each other when a letter is drawn on its own ──────────
+// Pages that draw a word letter by letter (so one letter can be marked) shape
+// every letter alone. For 7:196 وَلِـِّۧىَ the QPC-style fonts draw the plain
+// word as ONE ready-made glyph with the small high yeh (U+06E7) low and the
+// shadda above it; shaped alone, the tatweel puts both at the same height and
+// the shadda sits on the yeh. The shadda is redrawn as an overlay, its ink
+// bottom 0.06em above the yeh. MEASURED per font: drawn in the browser at
+// 120px, shadda overlay at top 0 vs the yeh's ink top (same formula as
+// HIGH_MEEM_TOP). Amiri and UthmanTN stack these two correctly on their own.
+// Found by shaping every letter of the Quran alone in every bundled font
+// (HarfBuzz ink boxes): this is the only unit whose marks collide alone but
+// not in the plain word.
+const ALONE_STACK: Record<string, Record<string, UnitOverlay[]>> = {
+  // ـۧـِّ = tatweel, small high yeh, shadda, kasra (the Quran.com order)
+  'Hafs':                      { '\u0640\u06E7\u0651\u0650': [{ mark: '\u0651', top: -0.11 }] },
+  'Uthmanic HAFS v22':         { '\u0640\u06E7\u0651\u0650': [{ mark: '\u0651', top: -0.11 }] },
+  'Elgharib KFGQPCHafs V10':   { '\u0640\u06E7\u0651\u0650': [{ mark: '\u0651', top: -0.17 }] },
+  'Elgharib HAFSTharwatEmara': { '\u0640\u06E7\u0651\u0650': [{ mark: '\u0651', top: 0.09 }] },
+};
+
+/** Overlays that keep a letter's own marks apart when it is drawn alone
+ *  (see ALONE_STACK); null when the font stacks them fine. */
+export const aloneStackOverlays = (unit: string, font = currentQuranicFont()): UnitOverlay[] | null => {
+  const table = ALONE_STACK[font];
+  if (!table) return null;
+  const key = markOrderFree(unit.replace(/‍/g, ''));
+  for (const k of Object.keys(table)) if (markOrderFree(k) === key) return table[k];
+  return null;
+};
+
+/** A letter unit with its marks in a fixed order, so the same marks stored in
+ *  another order still find their table entry. */
+const markOrderFree = (unit: string): string => {
+  const chars = Array.from(unit);
+  return chars[0] + chars.slice(1).sort().join('');
+};
+
+
+// ── Space between two letters that touch when drawn one by one ───────────────
+// A letter that never joins the next one (و ر ز ذ أ) can reach under it: the
+// tail of و runs on under an إ, whose kasra then lands on it (وَإِن، وَإِذَا,
+// 694 places). In the plain word the fonts draw such pairs as one ready-made
+// glyph that keeps them apart; split for marking, they touch. A small space
+// after the first letter clears it. Found by drawing every word of the Quran
+// letter by letter in every font and comparing each letter's ink with its
+// neighbour's (Chrome, pixel level); the gap is the smallest that leaves no
+// shared ink, MEASURED per font at 120px. Keys are the exact letter units
+// (with their marks), so nothing else moves. Only non-joining letters are
+// here: a gap inside a joined pair would cut the join.
+const ALONE_GAP: Record<string, Record<string, number>> = {
+  // وَ|إِ  وَّ|إِ
+  'Hafs': { '\u0648\u064E|\u0625\u0650': 0.1, '\u0648\u0651\u064E|\u0625\u0650': 0.1 },
+  // وَ|إِ  وَّ|إِ
+  'Uthmanic HAFS v22': { '\u0648\u064E|\u0625\u0650': 0.1, '\u0648\u0651\u064E|\u0625\u0650': 0.1 },
+  // وَ|إِ  وَّ|إِ
+  'Elgharib KFGQPCHafs V10': { '\u0648\u064E|\u0625\u0650': 0.05, '\u0648\u0651\u064E|\u0625\u0650': 0.05 },
+  // أُ|كَ  أُ|كُ  أُ|كۡ  ذَ|كُ  ذَ|كَّ  ذَ|كِّ  ذَّ|كَ  ذَّ|كَّ  ذُّ|كُ  ذُّ|كۡ  وَ|إِ  وَّ|إِ  وِّ|بِ
+  'Elgharib HAFSTharwatEmara': { '\u0623\u064F|\u0643\u064E': 0.2, '\u0623\u064F|\u0643\u064F': 0.2, '\u0623\u064F|\u0643\u06E1': 0.2, '\u0630\u064E|\u0643\u064F': 0.1, '\u0630\u064E|\u0643\u0651\u064E': 0.1, '\u0630\u064E|\u0643\u0651\u0650': 0.1, '\u0630\u0651\u064E|\u0643\u064E': 0.1, '\u0630\u0651\u064E|\u0643\u0651\u064E': 0.1, '\u0630\u0651\u064F|\u0643\u064F': 0.1, '\u0630\u0651\u064F|\u0643\u06E1': 0.1, '\u0648\u064E|\u0625\u0650': 0.2, '\u0648\u0651\u064E|\u0625\u0650': 0.2, '\u0648\u0651\u0650|\u0628\u0650': 0.1 },
+  // وَ|إِ  وَّ|إِ
+  'UthmanTN v2-0': { '\u0648\u064E|\u0625\u0650': 0.1, '\u0648\u0651\u064E|\u0625\u0650': 0.1 },
+  // رَ|أَ  رَ|أۡ  رَ|آ  رَٰ|بً  رَّ|آ  زَ|آ
+  'Amiri Regular': { '\u0631\u064E|\u0623\u064E': 0.05, '\u0631\u064E|\u0623\u06E1': 0.05, '\u0631\u064E|\u0627\u0653': 0.15, '\u0631\u064E\u0670|\u0628\u064B': 0.05, '\u0631\u0651\u064E|\u0627\u0653': 0.15, '\u0632\u064E|\u0627\u0653': 0.15 },
+};
+const GAP_KEY_STRIP = /[\u06E2\u06ED]|[\u06D6-\u06DC]+$/g;
+
+/** Extra space (em) after letter `i` of a word drawn letter by letter, so the
+ *  two letters don't touch (see ALONE_GAP); 0 for nearly every letter. */
+export const aloneGapAfterEm = (letters: ReadonlyArray<{ letter: string }>, i: number, font = currentQuranicFont()): number => {
+  const next = letters[i + 1]?.letter;
+  const table = ALONE_GAP[font];
+  if (!next || !table) return 0;
+  const key = `${markOrderFree(letters[i].letter.replace(GAP_KEY_STRIP, ''))}|${markOrderFree(next.replace(GAP_KEY_STRIP, ''))}`;
+  for (const [k, gap] of Object.entries(table)) {
+    const [a, b] = k.split('|');
+    if (`${markOrderFree(a)}|${markOrderFree(b)}` === key) return gap;
+  }
+  return 0;
+};
+
 /**
  * Overlay plan for a letter unit: the shipped iqlab meem overlays plus any
  * admin vowel adjustments for this unit. An adjustment for a meem replaces the
@@ -274,6 +353,7 @@ export const unitOverlayPlan = (
   if (!turkishFont && hasIqlabHighMeem(unit) && !adjMarks.includes(HIGH_MEEM)) {
     overlays.push({ mark: HIGH_MEEM, top: highMeemTopEm(unit), dx: -0.06 });
   }
+  for (const o of aloneStackOverlays(unit) ?? []) if (!adjMarks.includes(o.mark)) overlays.push(o);
   for (const m of adjMarks) overlays.push({ mark: m, top: adj![m].dy, dx: adj![m].dx });
   return overlays.length ? overlays : null;
 };

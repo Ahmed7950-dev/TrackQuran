@@ -8,7 +8,7 @@ import { computeReportRanks } from '../services/rankingService';
 import { getStudentCompletions } from '../services/tajweedService';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthProvider';
-import { renderWordWithMarks, wordMarkPlan, splitVerseWords, hasLowMeem, renderLowMeemUnit, almSeedForUnit } from '../utils/quranicMarks';
+import { renderWordWithMarks, wordMarkPlan, splitVerseWords, hasLowMeem, renderLowMeemUnit, almSeedForUnit, aloneStackOverlays, renderUnitOverlays, aloneGapAfterEm } from '../utils/quranicMarks';
 import { letterSeams, parseWordIntoLetters, splitTrailingWaqf, WAQF_STYLE } from '../utils/mistakeLetters';
 import { useSpreadLabels } from '../utils/spreadLabels';
 import { saveOrShareFile } from '../services/fileSaver';
@@ -702,7 +702,9 @@ const MistakesReviewPage: React.FC<MistakesReviewPageProps> = ({ student, showTi
         mistake: Mistake | undefined;
         /** Invisible joiner / non-joiner at the letter's edges (letterSeams). */
         seams: { lead: string; trail: string };
-    }> = ({ letter, letterKey, mistake, seams }) => {
+        /** Extra space (em) after the letter so its marks clear the next one (aloneGapAfterEm). */
+        gapAfter?: number;
+    }> = ({ letter, letterKey, mistake, seams, gapAfter = 0 }) => {
         const { glyph, waqf } = splitTrailingWaqf(letter);
         const getLetterColor = () => {
             if (mistake && mistake.errorText) {
@@ -719,8 +721,9 @@ const MistakesReviewPage: React.FC<MistakesReviewPageProps> = ({ student, showTi
                     display: 'inline', 
                     fontFamily: 'inherit',
                     letterSpacing: '0',
-                    // Ensure no gaps between letters for proper Arabic rendering
-                    margin: '0',
+                    // No gaps between letters for proper Arabic rendering — except
+                    // after و before إ, where the kasra would sit on the و's tail.
+                    marginBlock: 0, marginInlineStart: 0, marginInlineEnd: `${gapAfter}em`,
                     padding: '0'
                 }}
             >
@@ -766,7 +769,9 @@ const MistakesReviewPage: React.FC<MistakesReviewPageProps> = ({ student, showTi
                     {/* almSeedForUnit: keeps iOS CoreText shaping tatweel-hamza units as Arabic */}
                     {(() => {
                         const text = almSeedForUnit(glyph) + seams.lead + glyph + seams.trail;
-                        return hasLowMeem(glyph) ? renderLowMeemUnit(text, glyph, 10 / 7) : text;
+                        // Marks the font stacks wrong on a letter drawn alone (7:196): see aloneStackOverlays.
+                        const stack = aloneStackOverlays(glyph);
+                        return hasLowMeem(glyph) ? renderLowMeemUnit(text, glyph, 10 / 7) : stack ? renderUnitOverlays(text, stack) : text;
                     })()}
                 </span>
                 {/* A stopping sign only draws whole as its own run — splitTrailingWaqf. */}
@@ -831,6 +836,7 @@ const MistakesReviewPage: React.FC<MistakesReviewPageProps> = ({ student, showTi
                                 letterKey={letterKey}
                                 mistake={mistake}
                                 seams={letterSeams(letters, letterIndex)}
+                                gapAfter={aloneGapAfterEm(letters, letterIndex)}
                             />
                         );
                     })}

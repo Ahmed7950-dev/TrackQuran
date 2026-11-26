@@ -17,7 +17,7 @@ import { getPageOfAyah, saveStudentTeacherNote, getRecitedPagesSet, getMemorized
 import { pageVerseList } from '../services/quranPageData';
 import { letterSeams, splitTrailingWaqf, WAQF_STYLE } from '../utils/mistakeLetters';
 import { useSpreadLabels } from '../utils/spreadLabels';
-import { wordMarkPlan, correctiveWordFont, splitVerseWords, tanweenOnSeatAlif, almSeedForUnit, unitOverlayPlan, renderUnitOverlays, VowelAdjustment, VowelAdjMap, currentQuranicFont, TURKISH_FONT } from '../utils/quranicMarks';
+import { wordMarkPlan, correctiveWordFont, splitVerseWords, tanweenOnSeatAlif, almSeedForUnit, unitOverlayPlan, renderUnitOverlays, aloneGapAfterEm, VowelAdjustment, VowelAdjMap, currentQuranicFont, TURKISH_FONT } from '../utils/quranicMarks';
 import { loadVowelAdjustments, loadRecitationManifest, recitationVerseUrl, RecitationManifest } from '../services/quranLabService';
 import { computeRingData, translitOf, buttonMistakeLabel } from './MistakeRing';
 import MistakePicker, { MistakeKind } from './MistakePicker';
@@ -330,6 +330,8 @@ const LetterWithError: React.FC<{
     isCursorActive?: boolean;
     /** The invisible joiner / non-joiner before and after the letter (letterSeams). */
     seams?: { lead: string; trail: string };
+    /** Extra space (em) after this letter so its marks clear the next one (aloneGapAfterEm). */
+    gapAfter?: number;
     markLineHeight?: number; // leading of the surrounding Quran block (for mark overlays)
     vowelAdj?: Record<string, VowelAdjustment>; // admin vowel-position corrections for this unit
     focusMode?: boolean; // word-by-word focus reading — render the mistake note larger/readable
@@ -360,6 +362,7 @@ const LetterWithError: React.FC<{
     isFocused,
     isCursorActive,
     seams,
+    gapAfter = 0,
     markLineHeight = 2.6,
     vowelAdj,
     focusMode,
@@ -422,7 +425,7 @@ const LetterWithError: React.FC<{
     };
 
     return (
-        <span id={`letter-${letterKey}`} className="relative inline align-top" style={{ display: 'inline', fontFamily: 'inherit' }}>
+        <span id={`letter-${letterKey}`} className="relative inline align-top" style={{ display: 'inline', fontFamily: 'inherit', ...(gapAfter ? { marginInlineEnd: `${gapAfter}em` } : {}) }}>
             {isEditing && ReactDOM.createPortal(
                 <MistakePicker
                     letterKey={letterKey}
@@ -4235,6 +4238,7 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                                                 key={baseKey}
                                                 letter={letter}
                                                 seams={letterSeams(letters, letterIndex)}
+                                                gapAfter={aloneGapAfterEm(letters, letterIndex)}
                                                 letterKey={`tadabbur-${baseKey}`}
                                                 mistake={undefined}
                                                 isEditing={false}
@@ -4510,6 +4514,7 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                                     key={letterKey}
                                     letter={letter}
                                     seams={letterSeams(letters, letterIndex)}
+                                    gapAfter={aloneGapAfterEm(letters, letterIndex)}
                                     letterKey={letterKey}
                                     mistake={mistake}
                                     isEditing={isEditing}
@@ -5497,6 +5502,7 @@ const StudentProgressPage: React.FC<StudentProgressPageProps> = ({ student, stud
                                                                             key={lk}
                                                                             letter={letter}
                                                                             seams={letterSeams(letters, li)}
+                                                                            gapAfter={aloneGapAfterEm(letters, li)}
                                                                             letterKey={lk}
                                                                             mistake={mk}
                                                                             isEditing={editingLetterKey === lk}

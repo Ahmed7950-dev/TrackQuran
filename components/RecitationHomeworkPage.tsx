@@ -20,7 +20,7 @@ import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useSta
 import { getVersesForSurah } from '../services/dataService';
 import {
   splitVerseWords, renderWordWithMarks, currentQuranicFont, TURKISH_FONT,
-  wordMarkPlan, hasLowMeem, renderLowMeemUnit, almSeedForUnit,
+  wordMarkPlan, hasLowMeem, renderLowMeemUnit, almSeedForUnit, aloneStackOverlays, renderUnitOverlays, aloneGapAfterEm,
 } from '../utils/quranicMarks';
 import { letterSeams, parseWordIntoLetters, splitTrailingWaqf, WAQF_STYLE } from '../utils/mistakeLetters';
 import { useSpreadLabels } from '../utils/spreadLabels';
@@ -898,10 +898,10 @@ const RecitationHomeworkPage: React.FC<{ recitationId: string }> = ({ recitation
           const { lead, trail } = letterSeams(letters, index);
           const text = almSeedForUnit(glyph) + lead + glyph + trail;
           return (
-            <span key={index} className="relative inline align-top" style={{ display: 'inline', margin: 0, padding: 0 }}>
+            <span key={index} className="relative inline align-top" style={{ display: 'inline', marginBlock: 0, marginInlineStart: 0, marginInlineEnd: `${aloneGapAfterEm(letters, index)}em`, padding: 0 }}>
               {m && bubble(m)}
               <span className="inline" style={{ display: 'inline', ...(m ? letterStyle(m) : {}) }}>
-                {hasLowMeem(glyph) ? renderLowMeemUnit(text, glyph, lh) : text}
+                {hasLowMeem(glyph) ? renderLowMeemUnit(text, glyph, lh) : (() => { const stack = aloneStackOverlays(glyph); return stack ? renderUnitOverlays(text, stack) : text; })()}
               </span>
               {waqf && <span style={WAQF_STYLE}>{waqf}</span>}
             </span>

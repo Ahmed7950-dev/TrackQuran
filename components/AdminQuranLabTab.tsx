@@ -18,7 +18,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { QURAN_METADATA } from '../constants';
 import {
-  splitVerseWords, tanweenOnSeatAlif, almSeedForUnit, unitOverlayPlan, renderUnitOverlays,
+  splitVerseWords, tanweenOnSeatAlif, almSeedForUnit, unitOverlayPlan, renderUnitOverlays, aloneGapAfterEm,
   marksInUnit, MARK_NAMES, BELOW_MARKS, VowelAdjMap, VowelAdjustment,
 } from '../utils/quranicMarks';
 import {
@@ -483,7 +483,7 @@ const AdminQuranLabTab: React.FC = () => {
               key={letterKey}
               onClick={() => { setSel({ letterKey, unit: letter }); setPickedMark(null); setDirty(false); }}
               className={`cursor-pointer transition-colors ${isSel ? 'bg-violet-200/70 dark:bg-violet-600/40 rounded' : 'hover:bg-violet-100/60 dark:hover:bg-violet-900/30'}`}
-              style={{ display: 'inline' }}
+              style={{ display: 'inline', marginInlineEnd: `${aloneGapAfterEm(letters, li)}em` }}
             >
               {overlays ? renderUnitOverlays(text, overlays) : text}
             </span>
