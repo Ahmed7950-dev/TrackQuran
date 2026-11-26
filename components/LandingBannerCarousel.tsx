@@ -2,8 +2,8 @@
 // LandingBannerCarousel — the big banner right under the landing nav (replaced
 // the small "Why us" slider, components/WhyUsSlider.tsx, at the user's request).
 //
-// The banners are finished 2:1 pictures with their words drawn in, so the
-// frame keeps 2:1 at every width (1200 × 600 at most). The slides sit side by
+// The banners are finished 3:1 pictures with their words drawn in, so the
+// frame keeps 3:1 at every width (1200 × 400 at most). The slides sit side by
 // side on a track that slides sideways; it advances on its own every 7 s and
 // stops while the pointer is over it, while it has keyboard focus, while the
 // tab is hidden, and for anyone who asked for reduced motion. Arrows, dots,
@@ -17,11 +17,11 @@ interface Banner { src: string; small: string; alt: string }
 // The words in the pictures, for screen readers and if a picture fails to load.
 const BANNERS: Banner[] = [
   {
-    src: '/banners/learning-meets-play.webp', small: '/banners/learning-meets-play-900.webp',
+    src: '/banners/learning-meets-play.webp', small: '/banners/learning-meets-play-1080.webp',
     alt: 'Where learning meets play. Make learning Arabic an exciting adventure with LisanQuran’s interactive educational games.',
   },
   {
-    src: '/banners/follow-progress.webp', small: '/banners/follow-progress-900.webp',
+    src: '/banners/follow-progress.webp', small: '/banners/follow-progress-1080.webp',
     alt: 'Follow your child’s progress. Celebrate every achievement. Stay connected to your child’s learning journey with detailed insights and progress tracking.',
   },
 ];
@@ -87,7 +87,7 @@ const LandingBannerCarousel: React.FC<{ isDark: boolean; isRtl: boolean }> = ({ 
       }}>
       <style>{`
         .lbc-root { padding: 24px 24px 8px; }
-        .lbc-frame { position: relative; max-width: 1200px; margin: 0 auto; aspect-ratio: 2 / 1; overflow: hidden;
+        .lbc-frame { position: relative; max-width: 1200px; margin: 0 auto; aspect-ratio: 3 / 1; overflow: hidden;
           border-radius: 20px; background: #fff; box-shadow: 0 18px 50px -28px rgba(14, 74, 43, 0.45); }
         .lbc-track { display: flex; height: 100%; transition: transform 650ms cubic-bezier(.22,.7,.2,1); }
         .lbc-slide { flex: 0 0 100%; height: 100%; margin: 0; }
@@ -113,8 +113,8 @@ const LandingBannerCarousel: React.FC<{ isDark: boolean; isRtl: boolean }> = ({ 
           {BANNERS.map((b, i) => (
             <figure key={b.src} className="lbc-slide" aria-roledescription="slide" aria-label={`${i + 1} / ${n}`}
               aria-hidden={i !== index} {...(i !== index ? { inert: '' } as object : {})}>
-              <img src={b.src} srcSet={`${b.small} 900w, ${b.src} 1774w`} sizes="(max-width: 1248px) calc(100vw - 48px), 1200px"
-                alt={b.alt} width={1774} height={887} decoding="async" loading={i === 0 ? 'eager' : 'lazy'}
+              <img src={b.src} srcSet={`${b.small} 1080w, ${b.src} 2000w`} sizes="(max-width: 1248px) calc(100vw - 48px), 1200px"
+                alt={b.alt} width={2000} height={667} decoding="async" loading={i === 0 ? 'eager' : 'lazy'}
                 {...(i === 0 ? { fetchpriority: 'high' } as object : {})} />
             </figure>
           ))}
