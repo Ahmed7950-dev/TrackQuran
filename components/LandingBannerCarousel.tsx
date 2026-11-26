@@ -3,7 +3,8 @@
 // the small "Why us" slider, components/WhyUsSlider.tsx, at the user's request).
 //
 // The banners are finished 3:1 pictures with their words drawn in, so the
-// frame keeps 3:1 at every width (1200 × 400 at most). The slides sit side by
+// frame keeps 3:1 at every width. It runs edge to edge, right under the nav
+// (the user asked for no space above or at the sides). The slides sit side by
 // side on a track that slides sideways; it advances on its own every 7 s and
 // stops while the pointer is over it, while it has keyboard focus, while the
 // tab is hidden, and for anyone who asked for reduced motion. Arrows, dots,
@@ -77,7 +78,8 @@ const LandingBannerCarousel: React.FC<{ isDark: boolean; isRtl: boolean }> = ({ 
   };
 
   return (
-    <section aria-roledescription="carousel" aria-label="LisanQuran"
+    // A div, not a <section>: the landing pads every section on phones (52px).
+    <div role="region" aria-roledescription="carousel" aria-label="LisanQuran"
       className="lbc-root"
       onMouseEnter={() => setHold(true)} onMouseLeave={() => setHold(false)}
       onFocus={() => setHold(true)} onBlur={e => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setHold(false); }}
@@ -86,9 +88,8 @@ const LandingBannerCarousel: React.FC<{ isDark: boolean; isRtl: boolean }> = ({ 
         if (e.key === 'ArrowLeft') { e.preventDefault(); go(index + (isRtl ? 1 : -1)); }
       }}>
       <style>{`
-        .lbc-root { padding: 24px 24px 8px; }
-        .lbc-frame { position: relative; max-width: 1200px; margin: 0 auto; aspect-ratio: 3 / 1; overflow: hidden;
-          border-radius: 20px; background: #fff; box-shadow: 0 18px 50px -28px rgba(14, 74, 43, 0.45); }
+        .lbc-root { padding: 0 0 8px; }
+        .lbc-frame { position: relative; width: 100%; aspect-ratio: 3 / 1; overflow: hidden; background: #fff; }
         .lbc-track { display: flex; height: 100%; transition: transform 650ms cubic-bezier(.22,.7,.2,1); }
         .lbc-slide { flex: 0 0 100%; height: 100%; margin: 0; }
         .lbc-slide img { display: block; width: 100%; height: 100%; object-fit: cover; }
@@ -102,10 +103,6 @@ const LandingBannerCarousel: React.FC<{ isDark: boolean; isRtl: boolean }> = ({ 
         .lbc-dot { height: 32px; min-width: 24px; display: flex; align-items: center; justify-content: center;
           background: none; border: 0; padding: 0; cursor: pointer; }
         .lbc-dot span { display: block; width: 8px; height: 8px; border-radius: 4px; transition: width 250ms, background 250ms; }
-        @media (max-width: 640px) {
-          .lbc-root { padding: 12px 12px 4px; }
-          .lbc-frame { border-radius: 12px; }
-        }
         @media (prefers-reduced-motion: reduce) { .lbc-track { transition: none; } }
       `}</style>
       <div className="lbc-frame" onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
@@ -113,7 +110,7 @@ const LandingBannerCarousel: React.FC<{ isDark: boolean; isRtl: boolean }> = ({ 
           {BANNERS.map((b, i) => (
             <figure key={b.src} className="lbc-slide" aria-roledescription="slide" aria-label={`${i + 1} / ${n}`}
               aria-hidden={i !== index} {...(i !== index ? { inert: '' } as object : {})}>
-              <img src={b.src} srcSet={`${b.small} 1080w, ${b.src} 2000w`} sizes="(max-width: 1248px) calc(100vw - 48px), 1200px"
+              <img src={b.src} srcSet={`${b.small} 1080w, ${b.src} 2000w`} sizes="100vw"
                 alt={b.alt} width={2000} height={667} decoding="async" loading={i === 0 ? 'eager' : 'lazy'}
                 {...(i === 0 ? { fetchpriority: 'high' } as object : {})} />
             </figure>
@@ -133,7 +130,7 @@ const LandingBannerCarousel: React.FC<{ isDark: boolean; isRtl: boolean }> = ({ 
         {arrow(1)}
         </div>
       )}
-    </section>
+    </div>
   );
 };
 
