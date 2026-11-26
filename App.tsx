@@ -87,7 +87,7 @@ import {
 import {
   RecitationHomework, cancelRecitationHomework, clearRecitationHistory, createRecitationHomework,
   getRecitationHomework, listRecitationHomework, notifyRecitationAssigned, purgeOldRecitations,
-  closeFollowUps, rangeLabel as recitationRangeLabel, reassignRecitationVerses, recitationUrl, versesOf,
+  closeFollowUps, reviewRecitationHomework, rangeLabel as recitationRangeLabel, reassignRecitationVerses, recitationUrl, versesOf,
 } from './services/recitationHomeworkService';
 import { deleteMistakeVoice } from './services/mistakeVoiceService';
 import { GameInviteContext, GameInvitePopup } from './components/GameInvite';
@@ -2550,10 +2550,22 @@ const App: React.FC = () => {
               onJumpToVerse={key => setQuranHomeworkJump(prev => ({ key, n: (prev?.n ?? 0) + 1 }))}
               onSpotlight={setReviewSpotlight}
               onClose={() => setReviewRec(null)}
-              onReviewed={async done => {
-                setRecitations(prev => ({ ...prev, [done.id]: done }));
+              onReviewed={async passed => {
+                // "Passed" turns green at once; the save runs behind. If it
+                // fails, the homework goes back to how it was and the tutor is told.
+                const before = reviewRec;
+                setRecitations(prev => ({ ...prev, [passed.id]: passed }));
                 setReviewRec(null);
-                if (done.status !== 'passed') return;
+                if (passed.status !== 'passed') return;
+                handleMarkHomeworkDone(passed.studentId, passed.homeworkId);
+                const done = await reviewRecitationHomework(passed, 'passed');
+                if (!done) {
+                  if (before) setRecitations(prev => ({ ...prev, [passed.id]: before }));
+                  handleReopenHomework(passed.studentId, passed.homeworkId);
+                  window.alert('The homework could not be marked as passed — check your connection and try again.');
+                  return;
+                }
+                setRecitations(prev => ({ ...prev, [done.id]: done }));
                 // A homework the tutor reassigned earlier left a follow-up
                 // behind; passing this one finishes that too, so nothing is
                 // left open in the list or purple on the Quran page.
@@ -2565,7 +2577,7 @@ const App: React.FC = () => {
                     return next;
                   });
                 }
-                handleMarkHomeworkDone(done.studentId, [done.homeworkId, ...alsoClosed.map(r => r.homeworkId)]);
+                if (alsoClosed.length) handleMarkHomeworkDone(done.studentId, alsoClosed.map(r => r.homeworkId));
               }}
             />
           )}

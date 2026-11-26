@@ -16,7 +16,7 @@ import { QURAN_METADATA, isLetterMistakeKey } from '../constants';
 import { Mistake } from '../types';
 import {
   RecitationHomework, rangeLabel, reassignRecitationVerses, recitationUrl, WHOLE_TAKE,
-  reviewRecitationHomework, versesOf,
+  versesOf,
 } from '../services/recitationHomeworkService';
 
 const fmtClock = (ms: number): string => {
@@ -197,10 +197,10 @@ const RecitationReviewPanel: React.FC<{
     setErr(''); setBusy(verdict);
     audioRef.current?.pause();
     if (verdict === 'passed') {
-      const done = await reviewRecitationHomework(rec, 'passed');
+      // Green at once: the page shows it passed straight away and saves it
+      // behind (onReviewed); a failed save puts it back and says so.
       setBusy(null);
-      if (!done) { setErr('Could not save the review — check your connection.'); return; }
-      onReviewed(done);
+      onReviewed({ ...rec, status: 'passed', reviewedAt: new Date().toISOString() });
       return;
     }
     const ok = await onReassign(rec, wrongVerses);

@@ -384,9 +384,11 @@ export async function reviewRecitationHomework(
   const done = fromRow(data as Row);
   if (verdict === 'passed') {
     // Finally right — the month's board counts it now, once for the whole
-    // chain of reassignments this homework may have been through.
-    await logRecitationPass(done.id);
-    await createNotification({
+    // chain of reassignments this homework may have been through. Both run
+    // behind: the pass is saved, so the tutor's screen doesn't wait for them
+    // (each logs its own failure).
+    void logRecitationPass(done.id);
+    void createNotification({
       teacherId: done.teacherId, studentId: done.studentId, recipient: 'student', bookingId: null,
       type: 'quran_recitation_reviewed',
       title: '✅ Recitation homework passed',
@@ -396,7 +398,7 @@ export async function reviewRecitationHomework(
         verse: `${done.startSurah}:${done.startAyah}`,
         ...(done.reportId ? { url: portalHomeworkUrl(done.reportId, done.homeworkId) } : {}),
       },
-    });
+    }).catch(e => console.error('pass notification:', e));
   }
   return done;
 }
