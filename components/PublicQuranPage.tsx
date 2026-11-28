@@ -132,10 +132,10 @@ const PublicQuranPage: React.FC = () => {
             <ThemeIcon theme={theme} className="w-[17px] h-[17px]" />
           </button>
 
-          <a href="/"
+          <a href="/join"
             className="h-9 px-3 sm:px-4 flex-shrink-0 flex items-center rounded-xl bg-teal-700 hover:bg-teal-800 text-white text-[13px] font-extrabold">
             <span className="sm:hidden">Lessons</span>
-            <span className="hidden sm:inline">Book a free trial</span>
+            <span className="hidden sm:inline">Book a trial lesson</span>
           </a>
         </div>
       </header>

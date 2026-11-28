@@ -15,10 +15,10 @@ const RefundPolicyPage: React.FC = () => (
       </>
     }
   >
-    <Section heading="1. Free trial">
+    <Section heading="1. Trial lessons">
       <p>
-        New students can try a free trial lesson before subscribing, so you can decide whether {SITE_NAME}
-        is right for you before any payment is made.
+        New students can book a trial lesson before choosing a plan, so you can decide whether {SITE_NAME}
+        is right for you. Trial lessons are paid.
       </p>
     </Section>
 

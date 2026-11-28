@@ -1,9 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useRef } from 'react';
 import { useI18n } from '../context/I18nProvider';
 import { AppTheme, applyTheme, readTheme, nextTheme } from '../utils/theme';
 import { landingPalette, LandingPalette } from '../utils/landingPalette';
 import SharedThemeIcon from './ThemeIcon';
 import LandingBannerCarousel from './LandingBannerCarousel';
+import AboutUsPage from './AboutUsPage';
+import ContactUsPage from './ContactUsPage';
 import { LESSON_PRICES, LessonLength, MIN_LESSONS_PER_MONTH } from '../utils/lessonPricing';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -77,19 +79,63 @@ const LandingPage: React.FC<LandingPageProps> = ({ onOpenAuth }) => {
 
   const P: LandingPalette = landingPalette(theme);
 
+  // About us / Contact us: the same pages the tutor and student portals show
+  // under those tabs, opened in place of the landing sections.
+  const [view, setView] = useState<'home' | 'about' | 'contact'>('home');
+
   const navLinks = [
     { label: t('landing.readerNav'),   href: '/quran' },
     { label: t('landing.navPrograms'), href: '#programs' },
     { label: t('landing.kidsNav'),     href: '#kids' },
     { label: t('landing.navPricing'),  href: '#pricing' },
     { label: t('landing.navFaq'),      href: '#faq' },
+    { label: t('header.aboutUs'),      href: 'about' },
+    { label: t('header.contactUs'),    href: 'contact' },
   ];
 
   const go = (href: string) => {
     setMobileNavOpen(false);
+    if (href === 'about' || href === 'contact') {
+      setView(v => (v === href ? 'home' : href));
+      window.scrollTo({ top: 0 });
+      return;
+    }
     if (href.startsWith('/')) { window.location.href = href; return; }
+    if (view !== 'home') {
+      // back to the landing first, then to the section once it is on the page
+      setView('home');
+      requestAnimationFrame(() => requestAnimationFrame(() => document.querySelector(href)?.scrollIntoView({ behavior: 'smooth' })));
+      return;
+    }
     document.querySelector(href)?.scrollIntoView({ behavior: 'smooth' });
   };
+
+  // ── One line, always: the header row is measured, and when every tab no
+  // longer fits beside the logo and the buttons (narrow window, longer
+  // Turkish or Arabic words) the tabs move into the menu button together,
+  // instead of wrapping onto a second line. ─────────────────────────────────
+  const barRef = useRef<HTMLDivElement>(null);
+  const needWidth = useRef(0);
+  const [compact, setCompact] = useState(false);
+  useEffect(() => { setCompact(false); }, [language]); // new words: measure again
+  useLayoutEffect(() => {
+    const bar = barRef.current;
+    if (!bar) return;
+    const check = () => {
+      if (!compact) {
+        needWidth.current = bar.scrollWidth;
+        if (bar.scrollWidth > bar.clientWidth + 1) setCompact(true);
+      } else if (needWidth.current && bar.clientWidth >= needWidth.current) {
+        setCompact(false);
+      }
+    };
+    check();
+    // the web font changes the words' widths when it arrives
+    document.fonts?.ready.then(check).catch(() => {});
+    const ro = new ResizeObserver(check);
+    ro.observe(bar);
+    return () => ro.disconnect();
+  }, [compact, language]);
   const studentSignup = () => { window.location.href = '/join'; };
 
   /** A section title: the plain half, then the highlighted half. */
@@ -110,7 +156,7 @@ const LandingPage: React.FC<LandingPageProps> = ({ onOpenAuth }) => {
     <div style={{ display: 'flex', gap: 2, background: P.chipBg, borderRadius: 8, padding: '3px 4px', alignItems: 'center' }}>
       {(['en', 'ar', 'tr'] as const).map(lang => (
         <button key={lang} onClick={() => setLanguage(lang)} aria-pressed={language === lang}
-          style={{ padding: compact ? '3px 8px' : '6px 12px', borderRadius: 6, border: 'none', cursor: 'pointer', fontSize: compact ? 11 : 12, fontWeight: 700, fontFamily: F.body,
+          style={{ padding: compact ? '3px 6px' : '6px 12px', borderRadius: 6, border: 'none', cursor: 'pointer', fontSize: compact ? 11 : 12, fontWeight: 700, fontFamily: F.body,
             background: language === lang ? P.accent : 'transparent', color: language === lang ? P.onAccent : P.muted }}>
           {lang.toUpperCase()}
         </button>
@@ -127,23 +173,26 @@ const LandingPage: React.FC<LandingPageProps> = ({ onOpenAuth }) => {
 
       {/* ── Sticky header ────────────────────────────────────────────────── */}
       <nav aria-label="Main" style={{ position: 'sticky', top: 0, zIndex: 100, background: P.nav, backdropFilter: 'blur(14px)', WebkitBackdropFilter: 'blur(14px)', borderBottom: `1px solid ${P.border}` }}>
-        <div className="lp-bar" style={{ maxWidth: 1240, margin: '0 auto', display: 'flex', alignItems: 'center', height: 72 }}>
-          <a href="/" style={{ display: 'flex', alignItems: 'center', flexShrink: 0 }}>
+        <div ref={barRef} className={`lp-bar${compact ? ' lp-compact' : ''}`} style={{ maxWidth: 1400, margin: '0 auto', display: 'flex', alignItems: 'center', height: 72 }}>
+          <a href="/" onClick={e => { if (view !== 'home') { e.preventDefault(); setView('home'); window.scrollTo({ top: 0 }); } }} style={{ display: 'flex', alignItems: 'center', flexShrink: 0 }}>
             <img className="lp-logo" src={P.darkLogo ? '/TQ LOGO DM.png' : '/TQ LOGO.png'} alt="Lisan & Quran" style={{ width: 'auto' }} />
           </a>
 
           <div className="lp-links">
-            {navLinks.map(link => (
-              <button key={link.href} onClick={() => go(link.href)}
-                style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 14, fontWeight: 500, color: P.muted, fontFamily: F.body, padding: '4px 0', whiteSpace: 'nowrap' }}>
-                {link.label}
-              </button>
-            ))}
+            {navLinks.map(link => {
+              const on = link.href === view;
+              return (
+                <button key={link.href} onClick={() => go(link.href)} aria-current={on ? 'page' : undefined}
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 14, fontWeight: on ? 700 : 500, color: on ? P.heading : P.muted, fontFamily: F.body, padding: '4px 0', whiteSpace: 'nowrap', flexShrink: 0 }}>
+                  {link.label}
+                </button>
+              );
+            })}
           </div>
 
           <div className="lp-controls" style={{ display: 'flex', alignItems: 'center', marginInlineStart: 'auto' }}>
             <a href="/teach" className="lp-wide-only"
-              style={{ fontSize: 14, fontWeight: 700, color: P.chipText, background: P.chipBg, borderRadius: 999, padding: '9px 16px', textDecoration: 'none', whiteSpace: 'nowrap' }}>
+              style={{ fontSize: 14, fontWeight: 700, color: P.chipText, background: P.chipBg, borderRadius: 999, padding: '9px 13px', textDecoration: 'none', whiteSpace: 'nowrap' }}>
               {t('landing.navBeTutor')}
             </a>
             <div className="lp-desktop-only">{langSwitch(true)}</div>
@@ -152,11 +201,11 @@ const LandingPage: React.FC<LandingPageProps> = ({ onOpenAuth }) => {
               <SharedThemeIcon theme={theme} className="w-[18px] h-[18px]" />
             </button>
             <button onClick={onOpenAuth} className="lp-desktop-only"
-              style={{ background: 'none', border: `1.5px solid ${P.outline}`, color: P.outline, borderRadius: 10, padding: '8px 15px', fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: F.body, whiteSpace: 'nowrap' }}>
+              style={{ background: 'none', border: `1.5px solid ${P.outline}`, color: P.outline, borderRadius: 10, padding: '8px 12px', fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: F.body, whiteSpace: 'nowrap' }}>
               {t('landing.navSignIn')}
             </button>
             <button onClick={studentSignup} className="lp-signup"
-              style={{ background: P.accent, color: P.onAccent, border: 'none', borderRadius: 10, padding: '10px 18px', fontSize: 14, fontWeight: 700, cursor: 'pointer', fontFamily: F.body, whiteSpace: 'nowrap' }}>
+              style={{ background: P.accent, color: P.onAccent, border: 'none', borderRadius: 10, padding: '10px 14px', fontSize: 14, fontWeight: 700, cursor: 'pointer', fontFamily: F.body, whiteSpace: 'nowrap' }}>
               {t('landing.navStudentSignup')}
             </button>
             <button className="lp-burger" onClick={() => setMobileNavOpen(o => !o)} aria-label="Menu" aria-expanded={mobileNavOpen}
@@ -173,8 +222,8 @@ const LandingPage: React.FC<LandingPageProps> = ({ onOpenAuth }) => {
         {mobileNavOpen && (
           <div style={{ background: P.nav, borderTop: `1px solid ${P.border}`, padding: '10px 20px 20px' }}>
             {navLinks.map(link => (
-              <button key={link.href} onClick={() => go(link.href)}
-                style={{ display: 'block', width: '100%', textAlign: 'start', background: 'none', border: 'none', cursor: 'pointer', fontSize: 15, fontWeight: 500, color: P.text, padding: '11px 0', fontFamily: F.body }}>
+              <button key={link.href} onClick={() => go(link.href)} aria-current={link.href === view ? 'page' : undefined}
+                style={{ display: 'block', width: '100%', textAlign: 'start', background: 'none', border: 'none', cursor: 'pointer', fontSize: 15, fontWeight: link.href === view ? 700 : 500, color: link.href === view ? P.heading : P.text, padding: '11px 0', fontFamily: F.body }}>
                 {link.label}
               </button>
             ))}
@@ -201,6 +250,11 @@ const LandingPage: React.FC<LandingPageProps> = ({ onOpenAuth }) => {
         )}
       </nav>
 
+      {view !== 'home' ? (
+        <main dir="ltr" style={{ maxWidth: 1240, margin: '0 auto', padding: '32px 16px 72px' }}>
+          {view === 'about' ? <AboutUsPage /> : <ContactUsPage />}
+        </main>
+      ) : (<>
       {/* ── Banner carousel: first thing under the header, edge to edge ──── */}
       <LandingBannerCarousel isDark={P.darkLogo} isRtl={isRtl} accent={P.yellow} ink={P.outline} />
 
@@ -439,6 +493,8 @@ const LandingPage: React.FC<LandingPageProps> = ({ onOpenAuth }) => {
         </div>
       </section>
 
+      </>)}
+
       {/* ── Footer ───────────────────────────────────────────────────────── */}
       <footer style={{ background: P.bandDeep, color: P.onBandMuted, padding: '56px 24px 28px' }}>
         <div style={{ maxWidth: 1200, margin: '0 auto' }}>
@@ -461,6 +517,8 @@ const LandingPage: React.FC<LandingPageProps> = ({ onOpenAuth }) => {
                 { label: t('landing.navStudentSignup'), href: '/join' },
                 { label: t('landing.navBeTutor'), href: '/teach' },
                 { label: t('landing.readerNav'), href: '/quran' },
+                { label: t('header.aboutUs'), href: 'about' },
+                { label: t('header.contactUs'), href: 'contact' },
               ] },
               { title: t('landing.footerColLegal'), links: [
                 { label: t('landing.footerLinkTerms'), href: '/terms' },
@@ -472,7 +530,7 @@ const LandingPage: React.FC<LandingPageProps> = ({ onOpenAuth }) => {
                 <p style={{ margin: '0 0 14px', fontSize: 12, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: P.goldSoft }}>{col.title}</p>
                 {col.links.map(link => (
                   <a key={link.label} href={link.href}
-                    onClick={link.href.startsWith('#') ? e => { e.preventDefault(); go(link.href); } : undefined}
+                    onClick={link.href.startsWith('#') || link.href === 'about' || link.href === 'contact' ? e => { e.preventDefault(); go(link.href); } : undefined}
                     style={{ display: 'block', margin: '0 0 10px', fontSize: 14, color: P.onBandMuted, textDecoration: 'none' }}>
                     {link.label}
                   </a>
@@ -489,16 +547,16 @@ const LandingPage: React.FC<LandingPageProps> = ({ onOpenAuth }) => {
 
       <style>{`
         /* Header: the links need room; below 1180px they move into the menu */
-        .lp-bar { padding: 0 20px; gap: 22px; }
-        .lp-logo { height: 52px; }
-        .lp-controls { gap: 10px; }
+        .lp-bar { padding: 0 20px; gap: 16px; }
+        .lp-bar > * { flex-shrink: 0; }
+        .lp-logo { height: 46px; }
+        .lp-controls { gap: 6px; }
+        .lp-controls > * { flex-shrink: 0; }
         .lp-desktop-only, .lp-wide-only { display: flex; }
-        .lp-links { flex: 1; display: flex; justify-content: center; gap: 24px; align-items: center; }
+        .lp-links { flex: 1 0 auto; display: flex; justify-content: center; gap: 17px; align-items: center; }
         .lp-burger { display: none; }
-        @media (max-width: 1180px) {
-          .lp-links { display: none; }
-          .lp-burger { display: block; }
-        }
+        .lp-compact .lp-links { display: none; }
+        .lp-compact .lp-burger { display: block; }
         @media (max-width: 820px) { .lp-wide-only { display: none; } }
         @media (max-width: 640px) {
           .lp-bar { padding: 0 12px; gap: 10px; }

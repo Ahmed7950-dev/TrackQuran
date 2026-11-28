@@ -25,7 +25,7 @@ const PricingPage: React.FC = () => (
     intro={
       <>
         One price for every student. Choose the lesson length, then how many lessons you want each
-        month, starting from {MIN_LESSONS_PER_MONTH}. New students start with a free trial lesson.
+        month, starting from {MIN_LESSONS_PER_MONTH}. New students start with a trial lesson.
       </>
     }
   >
@@ -55,7 +55,7 @@ const PricingPage: React.FC = () => (
       </ul>
       <a href="/join"
         className="mt-6 block text-center py-3 rounded-xl text-sm font-bold bg-teal-600 text-white hover:bg-teal-700 transition-colors">
-        Book a free trial
+        Book a trial lesson
       </a>
     </div>
 
