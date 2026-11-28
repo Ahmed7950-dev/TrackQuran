@@ -1342,7 +1342,8 @@
     "tutorCardSub": "Apply to join the school. We read every application.",
     "teachersImgAlt": "A teacher giving a live Quran lesson on a computer",
     "faqTitleHl": "answered.",
-    "faqSub": "Anything else? Ask us during your free trial."
+    "faqSub": "Anything else? Ask us during your free trial.",
+    "heroShotAlt": "The live lesson page: the teacher marks each mistake on the exact letter"
   },
   "register": {
     "welcomeTitle": "Register as a student",

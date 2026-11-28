@@ -228,9 +228,11 @@ const LandingPage: React.FC<LandingPageProps> = ({ onOpenAuth }) => {
 
         <div className="lp-hero-visual" style={{ flex: '1 1 460px', minWidth: 0, position: 'relative' }}>
           <div style={{ background: '#0B0F14', borderRadius: 26, padding: 12, boxShadow: `0 30px 70px ${P.accentShadow}` }}>
-            <img src="/showcase/letter-cards.webp" srcSet="/showcase/letter-cards-720.webp 720w, /showcase/letter-cards.webp 1440w"
-              sizes="(max-width: 900px) 92vw, 560px" width={1440} height={900}
-              alt={t('landing.game_letterCards_name')} style={{ display: 'block', width: '100%', height: 'auto', aspectRatio: '16 / 10', objectFit: 'cover', borderRadius: 16 }} />
+            {/* The real live logging page (a made-up student, Maryam): the marks a
+                teacher puts on the exact letter during a lesson. */}
+            <img src="/showcase/live-logging.webp" srcSet="/showcase/live-logging-720.webp 720w, /showcase/live-logging.webp 1440w"
+              sizes="(max-width: 900px) 92vw, 560px" width={1440} height={900} fetchPriority="high"
+              alt={t('landing.heroShotAlt')} style={{ display: 'block', width: '100%', height: 'auto', aspectRatio: '16 / 10', objectFit: 'cover', borderRadius: 16 }} />
           </div>
           <a href="/quran" className="lp-reader-card"
             style={{ display: 'block', textDecoration: 'none', background: P.card, border: `1px solid ${P.border}`, borderRadius: 18, padding: '18px 20px', boxShadow: `0 18px 40px ${P.accentShadow}` }}>
