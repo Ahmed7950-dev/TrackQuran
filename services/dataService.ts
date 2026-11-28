@@ -901,6 +901,7 @@ export const deleteTeacherAccount = async (teacherId: string): Promise<void> => 
   // NOT arabic_lessons: those are the shared curriculum every teacher works
   // from, whoever happened to upload them. Removing a teacher must not take
   // the course with them.
+  await supabase.from('tutor_applications').delete().eq('user_id', teacherId);
   await supabase.from('profiles').delete().eq('id', teacherId);
 };
 

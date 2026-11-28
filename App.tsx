@@ -49,6 +49,8 @@ import TermsOfServicePage from './components/TermsOfServicePage';
 import PrivacyPolicyPage from './components/PrivacyPolicyPage';
 import RefundPolicyPage from './components/RefundPolicyPage';
 import StudentRegisterPage from './components/StudentRegisterPage';
+import TutorApplyPage from './components/TutorApplyPage';
+import { landingPalette } from './utils/landingPalette';
 import StudentApp from './components/StudentApp';
 import StudentRoute from './components/StudentRoute';
 import PublicQuranPage from './components/PublicQuranPage';
@@ -144,42 +146,33 @@ const useQuranicFont = (teacherId?: string) => {
  * AuthProvider updates currentUser, the parent App re-renders and
  * immediately shows the dashboard — the landing page unmounts automatically.
  */
-// ── Beautiful branded auth modal (shown over the landing page) ────────────────
+// ── Sign-in window (shown over the landing page) ──────────────────────────────
+// Sign-in only. The site is one school now: students sign up at /join and
+// tutors apply at /teach, so this window no longer creates accounts. It sends
+// each kind of newcomer to their own page instead. Follows the landing's four
+// looks (utils/landingPalette).
 const AuthModal: React.FC<{ onClose: () => void }> = ({ onClose }) => {
-  const [isSignUp, setIsSignUp] = useState(false);
-  const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const { login, signup, signInWithGoogle } = useAuth();
+  const { login, signInWithGoogle } = useAuth();
   const { t } = useI18n();
+  const P = landingPalette(readTheme());
+  const font = "'DM Sans', sans-serif";
 
-  const isDark = document.documentElement.classList.contains('dark');
-  const bg        = isDark ? '#0d1f17' : '#FAF6EC';
-  const cardBg    = isDark ? '#142012' : '#FFFDF8';
-  const green     = '#0E4A2B';
-  const greenDeep = '#08321E';
-  const gold      = '#C9A24A';
-  const goldSoft  = '#E1C588';
-  const ink       = isDark ? '#e8ead6' : '#1A2B22';
-  const inkMuted  = isDark ? '#8a9e8f' : '#5C6B62';
-  const border    = isDark ? '#1f3828' : '#E5DFCE';
-  const inputBg   = isDark ? '#0f1e15' : '#fff';
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(''); setLoading(true);
     try {
-      if (isSignUp) {
-        if (!name) { setError('Name is required.'); setLoading(false); return; }
-        if (password.length < 6) { setError('Password must be at least 6 characters.'); setLoading(false); return; }
-        const r = await signup(name, email, password);
-        if (r.error) setError(r.error);
-      } else {
-        const r = await login(email, password);
-        if (r.error) setError(r.error);
-      }
+      const r = await login(email, password);
+      if (r.error) setError(r.error);
     } catch { setError('An unexpected error occurred.'); }
     finally { setLoading(false); }
   };
@@ -191,116 +184,90 @@ const AuthModal: React.FC<{ onClose: () => void }> = ({ onClose }) => {
     finally { setLoading(false); }
   };
 
+  const labelStyle: React.CSSProperties = { display: 'block', fontSize: 12, fontWeight: 600, color: P.muted, marginBottom: 6, letterSpacing: '0.04em', fontFamily: font };
+  const inputStyle: React.CSSProperties = { width: '100%', padding: '10px 14px', borderRadius: 10, border: `1.5px solid ${P.border}`, background: P.input, color: P.text, fontSize: 14, fontFamily: font, outline: 'none', boxSizing: 'border-box' };
+  const linkBtn = (filled: boolean): React.CSSProperties => ({
+    display: 'flex', flex: 1, boxSizing: 'border-box', justifyContent: 'center', alignItems: 'center', textAlign: 'center',
+    padding: '11px 8px', borderRadius: 12, fontSize: 13.5, fontWeight: 700, fontFamily: font, textDecoration: 'none',
+    border: `1.5px solid ${filled ? P.accent : P.outline}`, background: filled ? P.accent : 'transparent',
+    color: filled ? P.onAccent : P.outline,
+  });
+
   return (
     <div
-      style={{ position: 'fixed', inset: 0, zIndex: 9999, background: 'rgba(8,50,30,0.6)', backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}
+      style={{ position: 'fixed', inset: 0, zIndex: 9999, background: 'rgba(8,20,14,0.6)', backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}
       onClick={e => { if (e.target === e.currentTarget) onClose(); }}
     >
-      <div style={{ position: 'relative', width: '100%', maxWidth: 420, background: cardBg, borderRadius: 24, boxShadow: '0 32px 80px rgba(8,50,30,0.35)', border: `1px solid ${border}`, overflow: 'hidden' }}>
+      <div role="dialog" aria-modal="true" aria-label={t('login.signIn')}
+        style={{ position: 'relative', width: '100%', maxWidth: 420, maxHeight: 'calc(100vh - 32px)', overflowY: 'auto', background: P.card, borderRadius: 24, boxShadow: '0 32px 80px rgba(0,0,0,0.35)', border: `1px solid ${P.border}` }}>
 
-        {/* Top green band with logo */}
-        <div style={{ background: greenDeep, padding: '28px 32px 24px', textAlign: 'center', position: 'relative' }}>
-          {/* Subtle star pattern overlay */}
+        {/* Top band with logo */}
+        <div style={{ background: P.bandDeep, padding: '26px 32px 22px', textAlign: 'center', position: 'relative' }}>
           <svg style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', opacity: 0.07 }} preserveAspectRatio="xMidYMid slice">
             <defs>
               <pattern id="modal-star" x="0" y="0" width="50" height="50" patternUnits="userSpaceOnUse">
-                <polygon points="25,4 28,18 42,18 31,27 35,41 25,33 15,41 19,27 8,18 22,18" fill={gold} />
+                <polygon points="25,4 28,18 42,18 31,27 35,41 25,33 15,41 19,27 8,18 22,18" fill={P.gold} />
               </pattern>
             </defs>
             <rect width="100%" height="100%" fill="url(#modal-star)" />
           </svg>
           <div style={{ position: 'relative' }}>
             <img src="/TQ LOGO DM.png" alt="Lisan & Quran" style={{ height: 52, width: 'auto', margin: '0 auto' }} />
-            <p style={{ margin: '10px 0 0', fontSize: 13, color: 'rgba(250,246,236,0.65)', fontFamily: "'DM Sans', sans-serif", letterSpacing: '0.04em' }}>
-              {isSignUp ? t('login.signUp') : t('login.signIn')} · Lisan &amp; Quran
+            <p style={{ margin: '10px 0 0', fontSize: 13, color: P.onBandMuted, fontFamily: font, letterSpacing: '0.04em' }}>
+              {t('login.signIn')} · Lisan &amp; Quran
             </p>
           </div>
         </div>
 
-        {/* Close button */}
-        <button onClick={onClose} aria-label="Close" style={{ position: 'absolute', top: 14, right: 14, zIndex: 10, background: 'rgba(255,255,255,0.1)', border: 'none', cursor: 'pointer', color: goldSoft, width: 30, height: 30, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, lineHeight: 1 }}>
+        <button onClick={onClose} aria-label="Close" style={{ position: 'absolute', top: 14, right: 14, zIndex: 10, background: 'rgba(255,255,255,0.12)', border: 'none', cursor: 'pointer', color: P.goldSoft, width: 30, height: 30, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, lineHeight: 1 }}>
           ✕
         </button>
 
-        {/* Form body */}
-        <div style={{ padding: '28px 32px 32px' }}>
+        <div style={{ padding: '26px 32px 28px' }}>
+          <button onClick={handleGoogle} disabled={loading}
+            style={{ width: '100%', padding: '11px', borderRadius: 12, border: `1.5px solid ${P.border}`, background: P.input, color: P.text, fontSize: 14, fontWeight: 600, fontFamily: font, cursor: loading ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10 }}>
+            <svg width="18" height="18" viewBox="0 0 488 512"><path fill="#4285F4" d="M488 261.8C488 403.3 381.5 512 244 512 109.8 512 0 402.2 0 261.8 0 120.5 109.8 11.8 244 11.8c70.4 0 129.5 27.1 175.4 69.1l-63.1 61.9C333.1 119.3 293.8 98.2 244 98.2c-76.4 0-138.3 61.9-138.3 138.3s61.9 138.3 138.3 138.3c88.1 0 112.3-63.7 115.5-98.2H244v-72h244z"/></svg>
+            {t('login.googleSignIn')}
+          </button>
 
-          {/* Tab switch */}
-          <div style={{ display: 'flex', background: isDark ? '#0f1e15' : '#F2EBD9', borderRadius: 12, padding: 4, marginBottom: 24, gap: 4 }}>
-            {[false, true].map(su => (
-              <button key={String(su)} onClick={() => { setIsSignUp(su); setError(''); }}
-                style={{ flex: 1, padding: '8px 0', borderRadius: 9, border: 'none', cursor: 'pointer', fontSize: 13.5, fontWeight: 600, fontFamily: "'DM Sans', sans-serif", transition: 'all 0.15s',
-                  background: isSignUp === su ? green : 'transparent',
-                  color: isSignUp === su ? '#fff' : inkMuted,
-                  boxShadow: isSignUp === su ? '0 2px 8px rgba(14,74,43,0.25)' : 'none',
-                }}>
-                {su ? t('login.signUp') : t('login.signIn')}
-              </button>
-            ))}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, margin: '18px 0' }}>
+            <div style={{ flex: 1, height: 1, background: P.border }} />
+            <span style={{ fontSize: 12, color: P.muted, fontFamily: font }}>{t('login.or')}</span>
+            <div style={{ flex: 1, height: 1, background: P.border }} />
           </div>
 
           <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-            {isSignUp && (
-              <div>
-                <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: inkMuted, marginBottom: 6, letterSpacing: '0.04em', fontFamily: "'DM Sans', sans-serif" }}>{t('login.nameLabel')}</label>
-                <input type="text" required value={name} onChange={e => setName(e.target.value)} placeholder={t('login.namePlaceholder')}
-                  style={{ width: '100%', padding: '10px 14px', borderRadius: 10, border: `1.5px solid ${border}`, background: inputBg, color: ink, fontSize: 14, fontFamily: "'DM Sans', sans-serif", outline: 'none', boxSizing: 'border-box', transition: 'border-color 0.15s' }}
-                  onFocus={e => e.target.style.borderColor = green} onBlur={e => e.target.style.borderColor = border}
-                />
-              </div>
-            )}
             <div>
-              <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: inkMuted, marginBottom: 6, letterSpacing: '0.04em', fontFamily: "'DM Sans', sans-serif" }}>{t('login.emailLabel')}</label>
-              <input type="email" required value={email} onChange={e => setEmail(e.target.value)} placeholder={t('login.emailPlaceholder')} autoComplete="email"
-                style={{ width: '100%', padding: '10px 14px', borderRadius: 10, border: `1.5px solid ${border}`, background: inputBg, color: ink, fontSize: 14, fontFamily: "'DM Sans', sans-serif", outline: 'none', boxSizing: 'border-box' }}
-                onFocus={e => e.target.style.borderColor = green} onBlur={e => e.target.style.borderColor = border}
-              />
+              <label htmlFor="auth-email" style={labelStyle}>{t('login.emailLabel')}</label>
+              <input id="auth-email" type="email" required value={email} onChange={e => setEmail(e.target.value)} placeholder={t('login.emailPlaceholder')} autoComplete="email" style={inputStyle} />
             </div>
             <div>
-              <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: inkMuted, marginBottom: 6, letterSpacing: '0.04em', fontFamily: "'DM Sans', sans-serif" }}>{t('login.passwordLabel')}</label>
-              <input type="password" required value={password} onChange={e => setPassword(e.target.value)} placeholder="••••••••" autoComplete="current-password"
-                style={{ width: '100%', padding: '10px 14px', borderRadius: 10, border: `1.5px solid ${border}`, background: inputBg, color: ink, fontSize: 14, fontFamily: "'DM Sans', sans-serif", outline: 'none', boxSizing: 'border-box' }}
-                onFocus={e => e.target.style.borderColor = green} onBlur={e => e.target.style.borderColor = border}
-              />
+              <label htmlFor="auth-password" style={labelStyle}>{t('login.passwordLabel')}</label>
+              <input id="auth-password" type="password" required value={password} onChange={e => setPassword(e.target.value)} placeholder="••••••••" autoComplete="current-password" style={inputStyle} />
             </div>
 
             {error && (
-              <div style={{ background: 'rgba(220,38,38,0.08)', border: '1px solid rgba(220,38,38,0.2)', borderRadius: 8, padding: '8px 12px', fontSize: 13, color: '#b91c1c', fontFamily: "'DM Sans', sans-serif" }}>
+              <div role="alert" style={{ background: 'rgba(220,38,38,0.08)', border: '1px solid rgba(220,38,38,0.2)', borderRadius: 8, padding: '8px 12px', fontSize: 13, color: P.darkLogo ? '#FCA5A5' : '#b91c1c', fontFamily: font }}>
                 {error}
               </div>
             )}
 
             <button type="submit" disabled={loading}
-              style={{ width: '100%', padding: '12px', borderRadius: 12, border: 'none', cursor: loading ? 'not-allowed' : 'pointer', background: green, color: '#fff', fontSize: 15, fontWeight: 700, fontFamily: "'DM Sans', sans-serif", boxShadow: '0 6px 20px rgba(14,74,43,0.3)', opacity: loading ? 0.7 : 1, transition: 'all 0.15s', marginTop: 2 }}>
-              {loading ? '…' : (isSignUp ? t('login.signUpButton') : t('login.signInButton'))}
+              style={{ width: '100%', padding: '12px', borderRadius: 12, border: 'none', cursor: loading ? 'not-allowed' : 'pointer', background: P.accent, color: P.onAccent, fontSize: 15, fontWeight: 700, fontFamily: font, boxShadow: `0 6px 20px ${P.accentShadow}`, opacity: loading ? 0.7 : 1, marginTop: 2 }}>
+              {loading ? '…' : t('login.signInButton')}
             </button>
           </form>
 
-          {/* Divider */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12, margin: '20px 0' }}>
-            <div style={{ flex: 1, height: 1, background: border }} />
-            <span style={{ fontSize: 12, color: inkMuted, fontFamily: "'DM Sans', sans-serif" }}>{t('login.or')}</span>
-            <div style={{ flex: 1, height: 1, background: border }} />
+          {/* No account yet: students and tutors each have their own way in */}
+          <div style={{ marginTop: 20, paddingTop: 18, borderTop: `1px solid ${P.border}`, textAlign: 'center' }}>
+            <p style={{ fontSize: 13, color: P.muted, fontFamily: font, margin: '0 0 10px' }}>{t('login.noAccount')}</p>
+            <div style={{ display: 'flex', gap: 10 }}>
+              <a href="/join" style={linkBtn(true)}>{t('login.studentCta')}</a>
+              <a href="/teach" style={linkBtn(false)}>{t('login.tutorCta')}</a>
+            </div>
           </div>
 
-          {/* Google */}
-          <button onClick={handleGoogle} disabled={loading}
-            style={{ width: '100%', padding: '11px', borderRadius: 12, border: `1.5px solid ${border}`, background: inputBg, color: ink, fontSize: 14, fontWeight: 600, fontFamily: "'DM Sans', sans-serif", cursor: loading ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10 }}>
-            <svg width="18" height="18" viewBox="0 0 488 512"><path fill="#4285F4" d="M488 261.8C488 403.3 381.5 512 244 512 109.8 512 0 402.2 0 261.8 0 120.5 109.8 11.8 244 11.8c70.4 0 129.5 27.1 175.4 69.1l-63.1 61.9C333.1 119.3 293.8 98.2 244 98.2c-76.4 0-138.3 61.9-138.3 138.3s61.9 138.3 138.3 138.3c88.1 0 112.3-63.7 115.5-98.2H244v-72h244z"/></svg>
-            {t('login.googleSignIn')}
-          </button>
-
-          {/* Student sign-up — this modal signs in tutors; students register at /join */}
-          <div style={{ marginTop: 18, paddingTop: 18, borderTop: `1px solid ${border}`, textAlign: 'center' }}>
-            <p style={{ fontSize: 13, color: inkMuted, fontFamily: "'DM Sans', sans-serif", margin: '0 0 10px' }}>{t('login.studentPrompt')}</p>
-            <a href="/join"
-              style={{ display: 'inline-flex', width: '100%', boxSizing: 'border-box', justifyContent: 'center', alignItems: 'center', padding: '11px', borderRadius: 12, border: `1.5px solid ${isDark ? goldSoft : green}`, background: 'transparent', color: isDark ? goldSoft : green, fontSize: 14, fontWeight: 700, fontFamily: "'DM Sans', sans-serif", textDecoration: 'none' }}>
-              {t('login.studentCta')}
-            </a>
-          </div>
-
-          {/* Quranic verse */}
-          <p style={{ textAlign: 'center', marginTop: 22, fontFamily: "'Amiri', serif", fontSize: 16, color: gold, direction: 'rtl' }}>
+          <p style={{ textAlign: 'center', marginTop: 20, marginBottom: 0, fontFamily: "'Amiri', serif", fontSize: 16, color: P.gold, direction: 'rtl' }}>
             وَقُل رَّبِّ زِدْنِي عِلْمًا
           </p>
         </div>
@@ -384,6 +351,9 @@ const App: React.FC = () => {
 
   // ── Student self-registration wizard — handles its own Google sign-in ────────
   if (window.location.pathname === '/join') return <StudentRegisterPage />;
+
+  // ── Tutor applications — "Be a tutor with us" ─────────────────────────────
+  if (window.location.pathname === '/teach') return <TutorApplyPage />;
 
   // ── Logged-in student portal — works for pure students AND tutors who also
   //    registered as a student with the same Google account ───────────────────
@@ -1907,7 +1877,7 @@ const App: React.FC = () => {
   // A teacher who has signed up but not been approved sees nothing but a notice.
   // Signing up is open on purpose; what is gated is being able to USE the app.
   if (currentUser.role === 'teacher' && !currentUser.approved) {
-    return <PendingApprovalPage name={currentUser.name} email={currentUser.email} onLogout={logout} />;
+    return <PendingApprovalPage userId={currentUser.id} name={currentUser.name} email={currentUser.email} onLogout={logout} />;
   }
 
   // Admin View — isolated panel, no student management

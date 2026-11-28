@@ -69,7 +69,10 @@ const BANNERS: Banner[] = [
 
 const AUTOPLAY_MS = 7000;
 
-const LandingBannerCarousel: React.FC<{ isDark: boolean; isRtl: boolean }> = ({ isDark, isRtl }) => {
+/** `accent` colours the current dot and the arrow hover, `ink` the arrows; both
+ *  come from the landing palette so the controls follow the four looks. */
+const LandingBannerCarousel: React.FC<{ isDark: boolean; isRtl: boolean; accent?: string; ink?: string }> =
+  ({ isDark, isRtl, accent = '#C9A227', ink }) => {
   const [index, setIndex] = useState(0);
   const [hold, setHold] = useState(false);          // pointer over it or focus inside
   const [hidden, setHidden] = useState(false);       // tab in the background
@@ -135,15 +138,17 @@ const LandingBannerCarousel: React.FC<{ isDark: boolean; isRtl: boolean }> = ({ 
         .lbc-slide img { display: block; width: 100%; height: 100%; object-fit: cover; }
         .lbc-arrow { width: 40px; height: 40px; border-radius: 50%; flex: none;
           border: 1.5px solid ${isDark ? 'rgba(255,255,255,.3)' : 'rgba(14,74,43,.25)'}; background: transparent;
-          color: ${isDark ? '#E9E4D8' : '#0E4A2B'}; display: flex; align-items: center; justify-content: center; cursor: pointer; }
-        .lbc-arrow:hover { border-color: #C9A227; }
-        .lbc-arrow:focus-visible { outline: 3px solid #C9A227; outline-offset: 2px; }
+          color: ${ink ?? (isDark ? '#E9E4D8' : '#0E4A2B')}; display: flex; align-items: center; justify-content: center; cursor: pointer; }
+        .lbc-arrow:hover { border-color: ${accent}; }
+        .lbc-arrow:focus-visible { outline: 3px solid ${accent}; outline-offset: 2px; }
         .lbc-nav { display: flex; justify-content: center; align-items: center; gap: 12px; margin-top: 12px; }
         .lbc-dots { display: flex; gap: 4px; }
         .lbc-dot { height: 32px; min-width: 24px; display: flex; align-items: center; justify-content: center;
           background: none; border: 0; padding: 0; cursor: pointer; }
         .lbc-dot span { display: block; width: 8px; height: 8px; border-radius: 4px; transition: width 250ms, background 250ms; }
         @media (prefers-reduced-motion: reduce) { .lbc-track { transition: none; } }
+        /* Phones: a dozen dots and two arrows do not fit; swipe and the dots stay */
+        @media (max-width: 520px) { .lbc-arrow { display: none; } .lbc-dot { min-width: 18px; } .lbc-dots { gap: 2px; } }
       `}</style>
       <div className="lbc-frame" onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
         <div className="lbc-track" dir="ltr" style={{ transform: `translateX(${(isRtl ? 1 : -1) * index * 100}%)`, flexDirection: isRtl ? 'row-reverse' : 'row' }}>
@@ -165,7 +170,7 @@ const LandingBannerCarousel: React.FC<{ isDark: boolean; isRtl: boolean }> = ({ 
         <div className="lbc-dots" role="group" aria-label="Choose a banner">
           {BANNERS.map((_, i) => (
             <button key={i} type="button" className="lbc-dot" onClick={() => go(i)} aria-label={`${i + 1}`} aria-current={i === index}>
-              <span style={{ width: i === index ? 26 : 8, background: i === index ? '#C9A227' : (isDark ? 'rgba(255,255,255,.35)' : 'rgba(14,74,43,.25)') }} />
+              <span style={{ width: i === index ? 26 : 8, background: i === index ? accent : (isDark ? 'rgba(255,255,255,.35)' : 'rgba(14,74,43,.25)') }} />
             </button>
           ))}
         </div>

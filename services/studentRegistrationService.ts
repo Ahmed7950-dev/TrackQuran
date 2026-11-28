@@ -29,8 +29,17 @@ export async function notifyTutorOfJoinRequest(tutorId: string, studentName: str
  *  Only a brand-new account (or an existing student) gets role='student'. */
 export async function markProfileAsStudent(userId: string, name: string): Promise<void> {
   try {
-    const { data } = await supabase.from('profiles').select('role').eq('id', userId).maybeSingle();
-    if (data?.role === 'teacher' || data?.role === 'admin') return; // dual role — don't demote them
+    const { data } = await supabase.from('profiles').select('role, approved').eq('id', userId).maybeSingle();
+    // Dual role: an approved tutor or the admin keeps their role.
+    if (data?.role === 'admin' || (data?.role === 'teacher' && data?.approved)) return;
+    // So does someone who has applied to teach and is waiting.
+    if (data?.role === 'teacher') {
+      const { data: app } = await supabase.from('tutor_applications').select('user_id').eq('user_id', userId).maybeSingle();
+      if (app) return;
+    }
+    // Anyone else (a brand-new account, or a Google sign-in that landed as an
+    // empty tutor account) becomes a student. The database allows exactly this
+    // one change of role: never-approved tutor → student.
     await supabase.from('profiles').upsert({ id: userId, name, role: 'student' }, { onConflict: 'id' });
   } catch (e) { console.error('markProfileAsStudent:', e); }
 }

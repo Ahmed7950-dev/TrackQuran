@@ -17,6 +17,10 @@ import {
   updateTicketStatus,
 } from '../services/dataService';
 import { getArabicStudents } from '../services/arabicService';
+import {
+  listApplications, listPeople, listStudentSignups,
+  TutorApplication, PersonRow, StudentSignup,
+} from '../services/tutorApplicationService';
 import { supabase } from '../lib/supabase';
 import Footer from './Footer';
 import TajweedPage from './TajweedPage';
@@ -56,13 +60,52 @@ const StatusBadge: React.FC<{ status: string }> = ({ status }) => {
   );
 };
 
+/** What a tutor wrote when applying at /teach. */
+const ApplicationCard: React.FC<{ app: TutorApplication }> = ({ app }) => {
+  const rows: [string, React.ReactNode][] = [
+    ['Phone', app.phone ? <a href={`https://wa.me/${app.phone.replace(/[^\d]/g, '')}`} target="_blank" rel="noreferrer" className="text-emerald-700 dark:text-emerald-400 underline">{app.phone}</a> : '—'],
+    ['Email', app.email || '—'],
+    ['Country', app.country || '—'],
+    ['Gender', app.gender ? app.gender[0].toUpperCase() + app.gender.slice(1) : '—'],
+    ['Native language', app.nativeLanguage || '—'],
+    ['English', app.englishLevel ? app.englishLevel[0].toUpperCase() + app.englishLevel.slice(1) : '—'],
+    ['Years teaching', app.yearsTeaching ?? '—'],
+    ['Ijazah', app.ijazah || '—'],
+    ['Teaches children', app.teachesKids ? 'Yes' : 'No'],
+    ['Recitation', app.sampleUrl ? <a href={app.sampleUrl} target="_blank" rel="noreferrer" className="text-emerald-700 dark:text-emerald-400 underline break-all">Open sample</a> : '—'],
+  ];
+  return (
+    <div className="bg-white dark:bg-gray-800 border border-emerald-200 dark:border-emerald-900/60 rounded-xl px-3.5 py-3">
+      <p className="text-[11px] font-extrabold text-emerald-700 dark:text-emerald-400 uppercase tracking-[0.08em] mb-2">
+        Application{app.createdAt ? ` · ${new Date(app.createdAt).toLocaleDateString()}` : ''}
+      </p>
+      <dl className="grid grid-cols-[auto_1fr] sm:grid-cols-[auto_1fr_auto_1fr] gap-x-4 gap-y-1.5 text-sm">
+        {rows.map(([k, v]) => (
+          <React.Fragment key={k}>
+            <dt className="text-slate-500 dark:text-slate-400">{k}</dt>
+            <dd className="font-semibold text-slate-800 dark:text-slate-100 min-w-0 break-words">{v}</dd>
+          </React.Fragment>
+        ))}
+      </dl>
+      {app.about && (
+        <p className="mt-2.5 pt-2.5 border-t border-slate-100 dark:border-gray-700 text-sm text-slate-700 dark:text-slate-200 whitespace-pre-line">{app.about}</p>
+      )}
+    </div>
+  );
+};
+
 // ── tabs ──────────────────────────────────────────────────────────────────────
 
-type TabId = 'teachers' | 'tajweed' | 'arabic' | 'qaedah' | 'letterAudio' | 'wordAudio' | 'exams' | 'quranLab';
+type TabId = 'teachers' | 'students' | 'tajweed' | 'arabic' | 'qaedah' | 'letterAudio' | 'wordAudio' | 'exams' | 'quranLab';
 
 const I = 'w-[18px] h-[18px] flex-shrink-0';
 
 const TAB_ICONS: Record<TabId, React.ReactNode> = {
+  students: (
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.9} stroke="currentColor" className={I}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M12 4 2 9l10 5 10-5-10-5Zm-6 7.2V16c0 1.7 2.7 3 6 3s6-1.3 6-3v-4.8M22 9v5" />
+    </svg>
+  ),
   teachers: (
     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.9} stroke="currentColor" className={I}>
       <path strokeLinecap="round" strokeLinejoin="round" d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 3a4 4 0 1 1 0 8 4 4 0 0 1 0-8ZM22 21v-2a4 4 0 0 0-3-3.87" />
@@ -106,7 +149,8 @@ const TAB_ICONS: Record<TabId, React.ReactNode> = {
 };
 
 const TAB_LABEL: Record<TabId, string> = {
-  teachers:    'Teachers',
+  teachers:    'Tutors',
+  students:    'Student sign-ups',
   tajweed:     'Tajweed lessons',
   arabic:      'Arabic lessons',
   qaedah:      'Qaedah',
@@ -117,7 +161,7 @@ const TAB_LABEL: Record<TabId, string> = {
 };
 
 const TAB_GROUPS: { group: string; items: TabId[] }[] = [
-  { group: 'People',  items: ['teachers'] },
+  { group: 'People',  items: ['teachers', 'students'] },
   { group: 'Content', items: ['tajweed', 'arabic', 'qaedah', 'exams'] },
   { group: 'Audio',   items: ['letterAudio', 'wordAudio'] },
   { group: 'Labs',    items: ['quranLab'] },
@@ -156,6 +200,12 @@ const AdminPanel: React.FC<Props> = ({ currentUser, onLogout }) => {
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [deletingId,      setDeletingId]      = useState<string | null>(null);
 
+  // Tutor applications, e-mails, and students who signed up on the website
+  const [applications, setApplications] = useState<Record<string, TutorApplication>>({});
+  const [people,       setPeople]       = useState<Record<string, PersonRow>>({});
+  const [signups,      setSignups]      = useState<StudentSignup[] | null>(null);
+  const [signupQuery,  setSignupQuery]  = useState('');
+
   // Global student counts
   const [totalQuranStudents,  setTotalQuranStudents]  = useState<number | null>(null);
   const [totalArabicStudents, setTotalArabicStudents] = useState<number | null>(null);
@@ -176,6 +226,9 @@ const AdminPanel: React.FC<Props> = ({ currentUser, onLogout }) => {
       setLoadingTeachers(false);
     });
     getAllTickets().then(setTickets);
+    listApplications().then(setApplications);
+    listPeople().then(setPeople);
+    listStudentSignups().then(setSignups);
 
     // Total student counts (simple Supabase count queries)
     supabase.from('students').select('id', { count: 'exact', head: true })
@@ -220,6 +273,7 @@ const AdminPanel: React.FC<Props> = ({ currentUser, onLogout }) => {
     setDeletingId(id);
     await deleteTeacherAccount(id);
     setTeachers(prev => prev.filter(t => t.id !== id));
+    setApplications(prev => { const next = { ...prev }; delete next[id]; return next; });
     if (expandedId === id) setExpandedId(null);
     setConfirmDeleteId(null);
     setDeletingId(null);
@@ -259,7 +313,21 @@ const AdminPanel: React.FC<Props> = ({ currentUser, onLogout }) => {
   };
 
   // ── derived ───────────────────────────────────────────────────────────────
-  const filtered       = teachers.filter(t => t.name.toLowerCase().includes(searchQuery.toLowerCase()));
+  // Tutors only: a student who signed up on the website has a profile too.
+  const tutors         = teachers.filter(t => t.role !== 'student');
+  const waitingTutors  = tutors.filter(t => t.role !== 'admin' && !t.approved).length;
+  const filtered       = tutors
+    .filter(t => {
+      const q = searchQuery.toLowerCase();
+      return t.name.toLowerCase().includes(q) || (people[t.id]?.email ?? '').toLowerCase().includes(q);
+    })
+    // Waiting applicants first, so a new application is never buried.
+    .sort((a, b) => Number(a.role === 'admin' || a.approved) - Number(b.role === 'admin' || b.approved));
+  const filteredSignups = (signups ?? []).filter(s => {
+    const q = signupQuery.toLowerCase();
+    return s.name.toLowerCase().includes(q) || s.email.toLowerCase().includes(q) || s.teacherName.toLowerCase().includes(q);
+  });
+  const pendingSignups = (signups ?? []).filter(s => s.approvalStatus === 'pending').length;
   const selectedTicket = tickets.find(t => t.id === selectedId) ?? null;
   const openCount      = tickets.filter(t => t.status === 'open').length;
   const totalStudents  = (totalQuranStudents ?? 0) + (totalArabicStudents ?? 0);
@@ -270,12 +338,12 @@ const AdminPanel: React.FC<Props> = ({ currentUser, onLogout }) => {
       <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none">
         <path strokeLinecap="round" strokeLinejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" />
       </svg>
-      <label htmlFor="admin-teacher-search" className="sr-only">Search teachers</label>
+      <label htmlFor="admin-teacher-search" className="sr-only">Search tutors</label>
       <input
         id="admin-teacher-search"
         value={searchQuery}
         onChange={e => setSearchQuery(e.target.value)}
-        placeholder="Search teachers…"
+        placeholder="Search tutors…"
         className="w-full h-10 pl-9 pr-3 bg-slate-100 dark:bg-gray-900 border border-slate-200 dark:border-gray-700 rounded-xl text-sm text-slate-700 dark:text-slate-200 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-teal-500"
       />
     </div>
@@ -296,9 +364,16 @@ const AdminPanel: React.FC<Props> = ({ currentUser, onLogout }) => {
       >
         {TAB_ICONS[tab]}
         <span className="truncate">{TAB_LABEL[tab]}</span>
-        {tab === 'teachers' && teachers.length > 0 && (
-          <span className={`ml-auto text-xs px-2 py-0.5 rounded-full ${active ? 'bg-white/25 text-white' : 'bg-white/10 text-slate-300'}`}>
-            {teachers.length}
+        {tab === 'teachers' && tutors.length > 0 && (
+          <span title={waitingTutors > 0 ? `${waitingTutors} waiting` : undefined}
+            className={`ml-auto text-xs px-2 py-0.5 rounded-full ${waitingTutors > 0 ? 'bg-amber-400 text-amber-950 font-extrabold' : active ? 'bg-white/25 text-white' : 'bg-white/10 text-slate-300'}`}>
+            {waitingTutors > 0 ? waitingTutors : tutors.length}
+          </span>
+        )}
+        {tab === 'students' && (signups?.length ?? 0) > 0 && (
+          <span title={pendingSignups > 0 ? `${pendingSignups} waiting for their tutor` : undefined}
+            className={`ml-auto text-xs px-2 py-0.5 rounded-full ${pendingSignups > 0 ? 'bg-amber-400 text-amber-950 font-extrabold' : active ? 'bg-white/25 text-white' : 'bg-white/10 text-slate-300'}`}>
+            {pendingSignups > 0 ? pendingSignups : signups!.length}
           </span>
         )}
       </button>
@@ -360,7 +435,8 @@ const AdminPanel: React.FC<Props> = ({ currentUser, onLogout }) => {
             <div className="min-w-0 leading-tight">
               <h1 className="font-extrabold text-slate-800 dark:text-slate-100 text-lg sm:text-xl truncate">{TAB_LABEL[activeTab]}</h1>
               <p className="text-xs text-slate-500 dark:text-slate-400 hidden sm:block">
-                {teachers.length} {teachers.length === 1 ? 'account' : 'accounts'}
+                {tutors.length} {tutors.length === 1 ? 'tutor' : 'tutors'}
+                {signups && ` · ${signups.length} student ${signups.length === 1 ? 'sign-up' : 'sign-ups'}`}
                 {totalStudents > 0 && ` · ${totalStudents} students`}
               </p>
             </div>
@@ -440,8 +516,11 @@ const AdminPanel: React.FC<Props> = ({ currentUser, onLogout }) => {
               {/* Stats */}
               <div className="grid grid-cols-3 gap-2.5 sm:gap-4">
                 <div className="bg-white dark:bg-gray-800 border border-slate-200 dark:border-gray-700 rounded-2xl px-3 py-3 sm:px-5 sm:py-4">
-                  <p className="text-[10px] sm:text-[11px] font-extrabold tracking-[0.08em] text-slate-500 dark:text-slate-400 uppercase">Teachers</p>
-                  <p className="text-2xl sm:text-3xl font-extrabold text-slate-800 dark:text-slate-100 mt-1">{teachers.length}</p>
+                  <p className="text-[10px] sm:text-[11px] font-extrabold tracking-[0.08em] text-slate-500 dark:text-slate-400 uppercase">Tutors</p>
+                  <p className="text-2xl sm:text-3xl font-extrabold text-slate-800 dark:text-slate-100 mt-1">
+                    {tutors.length}
+                    {waitingTutors > 0 && <span className="ml-2 align-middle text-xs font-extrabold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300">{waitingTutors} waiting</span>}
+                  </p>
                 </div>
                 <div className="bg-white dark:bg-gray-800 border border-slate-200 dark:border-gray-700 rounded-2xl px-3 py-3 sm:px-5 sm:py-4">
                   <p className="text-[10px] sm:text-[11px] font-extrabold tracking-[0.08em] text-slate-500 dark:text-slate-400 uppercase">Quran students</p>
@@ -458,13 +537,13 @@ const AdminPanel: React.FC<Props> = ({ currentUser, onLogout }) => {
               {/* Teacher table */}
               <div className="bg-white dark:bg-gray-800 border border-slate-200 dark:border-gray-700 rounded-2xl overflow-hidden flex-1">
                 <div className="hidden md:grid grid-cols-[minmax(0,2.4fr)_minmax(0,1.6fr)_minmax(0,1fr)_96px] gap-3 px-5 py-3 bg-slate-50 dark:bg-gray-900/40 border-b border-slate-200 dark:border-gray-700 text-[11px] font-extrabold tracking-[0.08em] text-slate-500 dark:text-slate-400 uppercase">
-                  <span>Teacher</span><span>Students</span><span>Joined</span><span />
+                  <span>Tutor</span><span>Students</span><span>Joined</span><span />
                 </div>
 
                 {loadingTeachers ? (
-                  <div className="text-center py-16 text-slate-400">Loading teachers…</div>
+                  <div className="text-center py-16 text-slate-400">Loading tutors…</div>
                 ) : filtered.length === 0 ? (
-                  <div className="text-center py-16 text-slate-400">No teachers found.</div>
+                  <div className="text-center py-16 text-slate-400">No tutors found.</div>
                 ) : filtered.map(teacher => {
                   const isMe       = teacher.id === currentUser.id;
                   const isExpanded = expandedId === teacher.id;
@@ -508,7 +587,13 @@ const AdminPanel: React.FC<Props> = ({ currentUser, onLogout }) => {
                                 <span className="px-1.5 py-0.5 bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 text-[10px] font-bold rounded">Waiting</span>
                               )}
                               {isMe && <span className="text-xs text-slate-400">(you)</span>}
+                              {teacher.role !== 'admin' && (applications[teacher.id]
+                                ? <span className="px-1.5 py-0.5 bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300 text-[10px] font-bold rounded">Applied</span>
+                                : !teacher.approved && <span className="px-1.5 py-0.5 bg-slate-100 dark:bg-gray-700 text-slate-500 dark:text-slate-300 text-[10px] font-bold rounded">No application</span>)}
                             </span>
+                            {people[teacher.id]?.email && (
+                              <span className="block text-xs text-slate-400 truncate">{people[teacher.id].email}</span>
+                            )}
                             <span className="block md:hidden text-xs text-slate-400 mt-0.5">
                               Joined {new Date(teacher.created_at).toLocaleDateString()}
                             </span>
@@ -590,7 +675,8 @@ const AdminPanel: React.FC<Props> = ({ currentUser, onLogout }) => {
 
                       {/* Expanded: both Quran + Arabic students */}
                       {isExpanded && (
-                        <div className="px-4 sm:px-5 pb-4 md:pl-[76px]">
+                        <div className="px-4 sm:px-5 pb-4 md:pl-[76px] space-y-3">
+                          {applications[teacher.id] && <ApplicationCard app={applications[teacher.id]} />}
                           {!data?.loaded ? (
                             <p className="text-sm text-slate-400 py-2">Loading students…</p>
                           ) : (data.quran.length + data.arabic.length) === 0 ? (
@@ -653,6 +739,57 @@ const AdminPanel: React.FC<Props> = ({ currentUser, onLogout }) => {
                     </div>
                   );
                 })}
+              </div>
+            </>
+          )}
+
+          {/* ── Student sign-ups Tab: who signed up on the website (/join) ── */}
+          {activeTab === 'students' && (
+            <>
+              <div className="relative">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" />
+                </svg>
+                <label htmlFor="admin-signup-search" className="sr-only">Search sign-ups</label>
+                <input id="admin-signup-search" value={signupQuery} onChange={e => setSignupQuery(e.target.value)} placeholder="Search students…"
+                  className="w-full sm:w-80 h-10 pl-9 pr-3 bg-white dark:bg-gray-800 border border-slate-200 dark:border-gray-700 rounded-xl text-sm text-slate-700 dark:text-slate-200 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-teal-500" />
+              </div>
+              <div className="bg-white dark:bg-gray-800 border border-slate-200 dark:border-gray-700 rounded-2xl overflow-hidden flex-1">
+                <div className="hidden md:grid grid-cols-[minmax(0,2.2fr)_minmax(0,0.9fr)_minmax(0,1.4fr)_minmax(0,1fr)_minmax(0,1fr)] gap-3 px-5 py-3 bg-slate-50 dark:bg-gray-900/40 border-b border-slate-200 dark:border-gray-700 text-[11px] font-extrabold tracking-[0.08em] text-slate-500 dark:text-slate-400 uppercase">
+                  <span>Student</span><span>Subject</span><span>Tutor</span><span>Status</span><span>Signed up</span>
+                </div>
+                {signups === null ? (
+                  <div className="text-center py-16 text-slate-400">Loading…</div>
+                ) : filteredSignups.length === 0 ? (
+                  <div className="text-center py-16 text-slate-400">No student sign-ups yet.</div>
+                ) : filteredSignups.map(s => (
+                  <div key={`${s.subject}-${s.studentId}`}
+                    className="md:grid md:grid-cols-[minmax(0,2.2fr)_minmax(0,0.9fr)_minmax(0,1.4fr)_minmax(0,1fr)_minmax(0,1fr)] md:items-center gap-3 px-4 sm:px-5 py-3.5 flex flex-wrap items-center border-b border-slate-100 dark:border-gray-700/70 last:border-b-0">
+                    <span className="flex items-center gap-3 min-w-0 flex-1 basis-full md:basis-auto">
+                      <span className="w-8 h-8 rounded-full bg-sky-600 text-white font-extrabold text-xs flex items-center justify-center flex-shrink-0">
+                        {(s.name || '?').charAt(0).toUpperCase()}
+                      </span>
+                      <span className="min-w-0">
+                        <span className="block font-bold text-sm text-slate-800 dark:text-slate-100 truncate">{s.name || 'Unnamed'}</span>
+                        {s.email && <span className="block text-xs text-slate-400 truncate">{s.email}</span>}
+                      </span>
+                    </span>
+                    <span>
+                      <span className={`px-2 py-0.5 rounded-full text-xs font-bold ${s.subject === 'quran' ? 'bg-teal-50 text-teal-700 dark:bg-teal-900/30 dark:text-teal-300' : 'bg-amber-50 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400'}`}>
+                        {s.subject === 'quran' ? 'Quran' : 'Arabic'}
+                      </span>
+                    </span>
+                    <span className="text-sm text-slate-600 dark:text-slate-300 truncate">{s.teacherName || '—'}</span>
+                    <span>
+                      <span className={`px-2 py-0.5 rounded-full text-xs font-bold ${s.approvalStatus === 'pending' ? 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300' : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300'}`}>
+                        {s.approvalStatus === 'pending' ? 'Waiting for tutor' : 'Active'}
+                      </span>
+                    </span>
+                    <span className="text-sm text-slate-500 dark:text-slate-400" title={new Date(s.createdAt).toLocaleString()}>
+                      {new Date(s.createdAt).toLocaleDateString()}
+                    </span>
+                  </div>
+                ))}
               </div>
             </>
           )}
