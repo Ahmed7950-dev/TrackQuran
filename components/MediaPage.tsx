@@ -23,7 +23,7 @@ import {
   MediaCategory, MediaItem, MediaProgress, ParsedLink,
   listCategories, createCategory, deleteCategory,
   listMedia, addMedia, updateMedia, deleteMedia,
-  refreshPlaylistNews, markPlaylistSeen, newVideoIds, totalNewVideos,
+  refreshPlaylistNews, markPlaylistSeen, newVideoIds, hasNewVideos, totalNewVideos,
   loadProgress, saveProgress, clearProgress,
   parseYouTubeLink, videoThumb, thumbFor, fetchPlaylistThumb, fetchVideoLengths, timecode, watchedFraction,
   hasEnglishSound,
@@ -794,6 +794,60 @@ const ChannelAvatar: React.FC<{ ch: { title: string; thumbUrl: string | null }; 
  * "later" and asks again next time Media opens. Drawn on the Media canvas,
  * "Channels & categories" page. */
 
+/** Playlists on the shelf that gained videos since the tutor last looked.
+ *  The tab badge counts these too, so opening Media says so here (the user
+ *  saw "1" on the tab and nothing on the page). Watch opens the playlist,
+ *  which marks it seen and highlights the new video. */
+const PlaylistNewsDialog: React.FC<{
+  items: MediaItem[];
+  onWatch: (it: MediaItem) => void;
+  onLater: () => void;
+}> = ({ items, onWatch, onLater }) => {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onLater(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onLater]);
+  return (
+    <div className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center sm:p-6"
+      style={{ background: 'rgba(5,6,7,0.72)' }} role="dialog" aria-modal="true" aria-label="New videos in your playlists"
+      onClick={e => { if (e.target === e.currentTarget) onLater(); }}>
+      <div className="w-full sm:max-w-[520px] flex flex-col overflow-hidden rounded-t-[20px] sm:rounded-2xl"
+        style={{ background: C.panel, border: `1px solid ${C.line}`, color: C.ink, fontFamily: SANS, maxHeight: '92dvh', boxShadow: '0 30px 80px rgba(0,0,0,0.45)' }}>
+        <div className="sm:hidden flex justify-center pt-2"><span style={{ width: 40, height: 4, borderRadius: 2, background: C.edge }} /></div>
+        <div className="flex items-center gap-2.5 pl-5 sm:pl-7 pr-3 pt-3 sm:pt-4">
+          <span style={{ fontFamily: MONO, fontSize: 10.5, letterSpacing: '0.12em', color: C.amber }}>NEW IN YOUR PLAYLISTS</span>
+          <span className="flex-grow" />
+          <button type="button" onClick={onLater} aria-label="Later" title="Later"
+            className="flex items-center justify-center w-11 h-11 rounded-[9px]" style={{ background: 'transparent', color: C.dim, border: 0 }}>
+            <Icon d={CLOSE} size={19} stroke={2.1} />
+          </button>
+        </div>
+        <div className="flex-grow overflow-y-auto px-5 sm:px-7 pt-1 pb-5 flex flex-col gap-2.5">
+          {items.map(it => {
+            const n = newVideoIds(it).length;
+            const thumb = thumbFor(it);
+            return (
+              <div key={it.id} className="flex items-center gap-3.5 rounded-xl p-2.5" style={{ border: `1px solid ${C.line}` }}>
+                <span className="relative flex-shrink-0 overflow-hidden rounded-lg" style={{ width: 96, aspectRatio: '16 / 9', background: C.edge }}>
+                  {thumb && <img src={thumb} alt="" className="absolute inset-0 w-full h-full object-cover" />}
+                </span>
+                <span className="min-w-0 flex-grow">
+                  <span className="block font-semibold text-[15px] truncate">{it.title}</span>
+                  <span className="block text-[13px]" style={{ color: C.muted }}>{n === 1 ? '1 new video' : `${n} new videos`}</span>
+                </span>
+                <button type="button" onClick={() => onWatch(it)}
+                  className="flex-shrink-0 h-10 px-4 rounded-[10px] font-semibold text-[14px]"
+                  style={{ background: C.amber, color: '#1a1206', border: 0 }}>Watch</button>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const NewVideosDialog: React.FC<{
   channel: MediaChannel;
   videos: ChannelVideo[];
@@ -1147,6 +1201,8 @@ const MediaPage: React.FC<MediaPageProps> = ({ teacherId, studentId, studentName
   const [channelsReady, setChannelsReady] = useState(false);
   /** The channel whose "new videos" pop-up is open, and the ones after it. */
   const [newsFor, setNewsFor] = useState<string | null>(null);
+  // Playlists with new videos, offered once per visit after any channel news.
+  const [playlistNewsOpen, setPlaylistNewsOpen] = useState(false);
   const newsQueue = useRef<string[]>([]);
   const [newsTotal, setNewsTotal] = useState(0);
   const autoOffered = useRef(false);
@@ -1224,7 +1280,8 @@ const MediaPage: React.FC<MediaPageProps> = ({ teacherId, studentId, studentName
     if (autoOffered.current || loading || !channelsReady) return;
     autoOffered.current = true;
     openNews(channels.filter(c => pendingOf(c).length > 0).map(c => c.id));
-  }, [loading, channelsReady, channels, pendingOf, openNews]);
+    if (items.some(hasNewVideos)) setPlaylistNewsOpen(true);
+  }, [loading, channelsReady, channels, pendingOf, openNews, items]);
 
   /** Opening a playlist is the tutor looking at it: nothing in it is new now.
    *
@@ -2041,6 +2098,14 @@ const MediaPage: React.FC<MediaPageProps> = ({ teacherId, studentId, studentName
           />
         );
       })()}
+
+      {playlistNewsOpen && !newsFor && items.some(hasNewVideos) && (
+        <PlaylistNewsDialog
+          items={items.filter(hasNewVideos)}
+          onWatch={it => { setPlaylistNewsOpen(false); openItem(it); }}
+          onLater={() => setPlaylistNewsOpen(false)}
+        />
+      )}
 
       {catMenu && (
         <CategoryMenu
