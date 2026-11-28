@@ -57,6 +57,14 @@ const BANNERS: Banner[] = [
     src: '/banners/letter-flight.webp', small: '/banners/letter-flight-1080.webp',
     alt: 'One of 9 interactive learning games. Meet our favourite game: Letter Flight. Students hear an Arabic letter and race against the teacher or another player to reach the correct one first. It’s a fun and competitive way to strengthen letter recognition, and it’s just one of 9 interactive games on LisanQuran.',
   },
+  {
+    src: '/banners/tajweed-colours.webp', small: '/banners/tajweed-colours-1080.webp',
+    alt: 'The interactive Tajweed Quran. See the rules. Master the recitation. Discover the Quran through 17 individually colour-coded Tajweed rules. Turn each rule on or off, focus on what you’re learning, and build confidence in every recitation.',
+  },
+  {
+    src: '/banners/teaching-standards.webp', small: '/banners/teaching-standards-1080.webp',
+    alt: 'Meet our teaching standards. Experts in recitation. Exceptional in teaching. Our teachers are carefully selected and professionally trained for their mastery of Quran recitation and Tajweed, excellent English communication skills, and the patience to guide every student with understanding and care. Because knowing how to recite is one thing. Knowing how to teach is another.',
+  },
 ];
 
 const AUTOPLAY_MS = 7000;
