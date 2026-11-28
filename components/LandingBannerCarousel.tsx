@@ -49,6 +49,14 @@ const BANNERS: Banner[] = [
     src: '/banners/see-progress.webp', small: '/banners/see-progress-1080.webp',
     alt: 'We don’t just promise progress. We help you see it. Through your personal page, you can view detailed statistics and visual reports for yourself or your child, including average mistakes per page, pages read, attendance and absence records, and many more powerful learning insights.',
   },
+  {
+    src: '/banners/time-zones.webp', small: '/banners/time-zones-1080.webp',
+    alt: 'Smart lesson scheduling. Different time zones. Same classroom. Book lessons effortlessly, wherever you are. Students and teachers see availability and scheduled lessons in their own local time, with automatic time zone conversion. No calculations, no confusion, just learning.',
+  },
+  {
+    src: '/banners/letter-flight.webp', small: '/banners/letter-flight-1080.webp',
+    alt: 'One of 9 interactive learning games. Meet our favourite game: Letter Flight. Students hear an Arabic letter and race against the teacher or another player to reach the correct one first. It’s a fun and competitive way to strengthen letter recognition, and it’s just one of 9 interactive games on LisanQuran.',
+  },
 ];
 
 const AUTOPLAY_MS = 7000;
