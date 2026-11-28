@@ -25,6 +25,22 @@ const BANNERS: Banner[] = [
     src: '/banners/follow-progress.webp', small: '/banners/follow-progress-1080.webp',
     alt: 'Follow your child’s progress. Celebrate every achievement. Stay connected to your child’s learning journey with detailed insights and progress tracking.',
   },
+  {
+    src: '/banners/tadabbur-lab.webp', small: '/banners/tadabbur-lab-1080.webp',
+    alt: 'Introducing Tadabbur Lab. Don’t just read the Quran. Discover it. Explore the meanings, stories, language, and context behind every Surah. Build your Quranic vocabulary with interactive flashcards and connect more deeply with the words of Allah.',
+  },
+  {
+    src: '/banners/first-letter-to-ijazah.webp', small: '/banners/first-letter-to-ijazah-1080.webp',
+    alt: 'From your first letter to your Ijazah. Start from scratch, perfect your recitation, or pursue an Ijazah with an authentic Sanad. Expert guidance at every stage of your Quran journey.',
+  },
+  {
+    src: '/banners/busy-week.webp', small: '/banners/busy-week-1080.webp',
+    alt: 'Busy for more than one lesson a week? No problem. Stay consistent with smart reminders, recorded assignments, and personalised feedback. Practise between lessons, improve your recitation, and resubmit anytime.',
+  },
+  {
+    src: '/banners/every-mistake.webp', small: '/banners/every-mistake-1080.webp',
+    alt: 'Every mistake is an opportunity to improve. Identify recitation and Tajweed mistakes in real time, uncover individual weaknesses, and turn detailed insights into personalised practice.',
+  },
 ];
 
 const AUTOPLAY_MS = 7000;
@@ -111,7 +127,9 @@ const LandingBannerCarousel: React.FC<{ isDark: boolean; isRtl: boolean }> = ({ 
             <figure key={b.src} className="lbc-slide" aria-roledescription="slide" aria-label={`${i + 1} / ${n}`}
               aria-hidden={i !== index} {...(i !== index ? { inert: '' } as object : {})}>
               <img src={b.src} srcSet={`${b.small} 1080w, ${b.src} 2000w`} sizes="100vw"
-                alt={b.alt} width={2000} height={667} decoding="async" loading={i === 0 ? 'eager' : 'lazy'}
+                alt={b.alt} width={2000} height={667} decoding="async"
+                // The one showing and the next one load; the rest wait their turn.
+                loading={i === index || i === (index + 1) % n ? 'eager' : 'lazy'}
                 {...(i === 0 ? { fetchpriority: 'high' } as object : {})} />
             </figure>
           ))}
