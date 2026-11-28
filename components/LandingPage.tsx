@@ -400,8 +400,10 @@ const LandingPage: React.FC<LandingPageProps> = ({ onOpenAuth }) => {
             </div>
           </div>
           <div style={{ flex: '1 1 420px', minWidth: 0, borderRadius: 24, overflow: 'hidden', border: `1px solid ${P.border}`, background: '#FFFFFF' }}>
-            <img src="/banners/teaching-standards.webp" alt={t('landing.teachersImgAlt')} loading="lazy" decoding="async"
-              style={{ display: 'block', width: '100%', aspectRatio: '4 / 3', objectFit: 'cover', objectPosition: '82% 50%' }} />
+            <img src="/showcase/teacher-lesson.webp" srcSet="/showcase/teacher-lesson-720.webp 720w, /showcase/teacher-lesson.webp 1448w"
+              sizes="(max-width: 900px) 92vw, 560px" width={1448} height={1086}
+              alt={t('landing.teachersImgAlt')} loading="lazy" decoding="async"
+              style={{ display: 'block', width: '100%', height: 'auto', aspectRatio: '4 / 3', objectFit: 'cover' }} />
           </div>
         </div>
       </section>
