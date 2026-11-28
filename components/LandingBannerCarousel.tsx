@@ -41,6 +41,14 @@ const BANNERS: Banner[] = [
     src: '/banners/every-mistake.webp', small: '/banners/every-mistake-1080.webp',
     alt: 'Every mistake is an opportunity to improve. Identify recitation and Tajweed mistakes in real time, uncover individual weaknesses, and turn detailed insights into personalised practice.',
   },
+  {
+    src: '/banners/media-library.webp', small: '/banners/media-library-1080.webp',
+    alt: 'The Islamic media library. Who said Quran lessons have to be boring? We go beyond teaching verses. Our carefully curated collection of short, child-friendly videos from selected YouTube channels brings stories from the Quran and Hadith to life, making lessons more enjoyable and introducing your child to our rich Islamic heritage.',
+  },
+  {
+    src: '/banners/see-progress.webp', small: '/banners/see-progress-1080.webp',
+    alt: 'We don’t just promise progress. We help you see it. Through your personal page, you can view detailed statistics and visual reports for yourself or your child, including average mistakes per page, pages read, attendance and absence records, and many more powerful learning insights.',
+  },
 ];
 
 const AUTOPLAY_MS = 7000;
